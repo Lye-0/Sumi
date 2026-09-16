@@ -1,0 +1,4 @@
+<Solution>
+ <Folder Name="/src/"><Project Path="src/Sumi.Core/Sumi.Core.csproj"/><Project Path="src/Sumi/Sumi.csproj"/></Folder>
+ <Folder Name="/tests/"><Project Path="tests/Sumi.Tests/Sumi.Tests.csproj"/></Folder>
+</Solution>

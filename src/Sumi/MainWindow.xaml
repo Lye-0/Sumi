@@ -1,0 +1,74 @@
+<Window x:Class="Sumi.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+ Title="Sumi" Width="800" Height="840" MinWidth="700" MinHeight="620" WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize" FontFamily="Yu Gothic UI, Segoe UI" FontSize="14" Foreground="{DynamicResource TextBrush}" Background="Transparent">
+ <shell:WindowChrome.WindowChrome><shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="6" CornerRadius="20" GlassFrameThickness="0"/></shell:WindowChrome.WindowChrome>
+ <Border Background="{DynamicResource CanvasBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" CornerRadius="18">
+ <Grid>
+  <Grid.RowDefinitions><RowDefinition Height="76"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <Grid Margin="28,12,20,8" MouseLeftButtonDown="TitleDrag">
+   <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="Sumi" FontFamily="Segoe UI" FontSize="32" FontWeight="SemiBold"/><TextBlock Text="画面から、ひとつ先へ。" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="18,7,0,0"/></StackPanel>
+   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+    <Button x:Name="ThemeButton" Content="ライト" Click="ToggleTheme" Padding="12,7" Margin="0,0,10,0" ToolTip="ライト / ダークを切り替える"/>
+    <Button Content="−" Click="Minimize" Padding="12,7" Margin="0,0,6,0" AutomationProperties.Name="最小化"/>
+    <Button Content="×" Click="HideWindow" Padding="12,7" AutomationProperties.Name="閉じてトレイへ"/>
+   </StackPanel>
+  </Grid>
+  <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="28,0,28,16">
+   <StackPanel>
+    <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" CornerRadius="18" Padding="22" Margin="0,4,0,20">
+     <StackPanel>
+      <Grid Margin="0,0,0,12"><TextBlock Text="画像への指示" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="毎回、画像と一緒に送信" Style="{StaticResource Muted}" HorizontalAlignment="Right" VerticalAlignment="Center"/></Grid>
+      <TextBox x:Name="PromptBox" Height="145" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" FontSize="15" AutomationProperties.Name="画像への指示" TextChanged="Edited"/>
+      <TextBlock Text="範囲を選ぶだけで、この指示と画像が送られます。" Style="{StaticResource Muted}" Margin="0,10,0,0"/>
+     </StackPanel>
+    </Border>
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="22"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+     <StackPanel>
+      <Grid Margin="0,0,0,10"><TextBlock Text="ローカルモデル" FontWeight="SemiBold" VerticalAlignment="Center"/><Button x:Name="RefreshButton" Content="更新" HorizontalAlignment="Right" Padding="10,4" Click="RefreshModels"/></Grid>
+      <ComboBox x:Name="ModelBox" AutomationProperties.Name="ローカルモデル" SelectionChanged="ModelChanged"/>
+      <TextBlock Text="起動コマンド" Style="{StaticResource Muted}" Margin="0,13,0,6"/>
+      <Border Background="{DynamicResource InputBrush}" CornerRadius="10" Padding="12"><TextBlock x:Name="CommandText" FontFamily="Cascadia Mono, Consolas" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource AccentBrush}"/></Border>
+      <TextBlock Text="モデルのデフォルト設定で起動します。" Style="{StaticResource Muted}" Margin="0,8,0,0"/>
+     </StackPanel>
+     <StackPanel Grid.Column="2">
+      <TextBlock Text="回答の受け取り方" FontWeight="SemiBold" Margin="0,6,0,15"/>
+      <ComboBox x:Name="DeliveryBox" SelectedIndex="0" AutomationProperties.Name="回答の受け取り方" SelectionChanged="EditedSelection"><ComboBoxItem Content="小型パネル"/><ComboBoxItem Content="クリップボード"/><ComboBoxItem Content="小型パネル ＋ クリップボード"/></ComboBox>
+      <TextBlock Text="撮影ショートカット" Style="{StaticResource Muted}" Margin="0,13,0,6"/>
+      <TextBox x:Name="HotkeyBox" Text="Ctrl+Alt+S" AutomationProperties.Name="撮影ショートカット" TextChanged="Edited"/>
+     </StackPanel>
+    </Grid>
+    <Expander Header="表示と詳細設定" Margin="0,16,0,0">
+     <StackPanel Background="{DynamicResource SurfaceBrush}" Margin="0,0,0,8">
+      <StackPanel Margin="16">
+       <CheckBox x:Name="GlassCheck" Content="透明感のある表示" Checked="GlassChanged" Unchecked="GlassChanged"/>
+       <Grid Margin="0,10,0,10"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <StackPanel><TextBlock Text="パネルの表示秒数（3–120）" Style="{StaticResource Muted}" Margin="0,0,0,6"/><TextBox x:Name="SecondsBox" Text="12" AutomationProperties.Name="パネルの表示秒数" TextChanged="Edited"/></StackPanel>
+        <StackPanel Grid.Column="2"><TextBlock Text="回答の待機上限・秒（30–1800）" Style="{StaticResource Muted}" Margin="0,0,0,6"/><TextBox x:Name="TimeoutBox" Text="300" AutomationProperties.Name="回答の待機上限" TextChanged="Edited"/></StackPanel>
+       </Grid>
+       <CheckBox x:Name="SaveImagesCheck" Content="撮影画像をファイルに保存" Checked="EditedCheck" Unchecked="EditedCheck"/>
+       <TextBox x:Name="ImageDirectoryBox" AutomationProperties.Name="画像の保存先フォルダー" ToolTip="空欄の場合はピクチャ内の Sumi フォルダー" TextChanged="Edited"/>
+       <TextBlock Text="保存先が空欄の場合：ピクチャ / Sumi" Style="{StaticResource Muted}" Margin="0,6,0,6"/>
+       <CheckBox x:Name="CopyImagesCheck" Content="撮影画像もクリップボードにコピー" Checked="EditedCheck" Unchecked="EditedCheck"/>
+       <TextBlock Text="回答の自動コピーも有効なら、回答完了時に画像が回答テキストへ置き換わります。" Style="{StaticResource Muted}" Margin="0,0,0,14"/>
+       <TextBlock Text="Ollama実行ファイル（空欄で自動検出）" Style="{StaticResource Muted}" Margin="0,0,0,6"/>
+       <TextBox x:Name="OllamaPathBox" AutomationProperties.Name="Ollama実行ファイル" TextChanged="ProviderEdited"/>
+      </StackPanel>
+     </StackPanel>
+    </Expander>
+    <Expander x:Name="RecentExpander" Header="直近の回答">
+     <StackPanel><TextBox x:Name="RecentAnswer" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" MaxHeight="320" MinHeight="60" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="直近の回答"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0"><Button Content="小型パネルで表示" Click="ShowRecentPanel" Margin="0,0,8,0"/><Button Content="回答をコピー" Click="CopyRecent"/></StackPanel></StackPanel>
+    </Expander>
+   </StackPanel>
+  </ScrollViewer>
+  <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,1,0,0" Padding="28,16,28,18">
+   <StackPanel>
+    <TextBlock x:Name="StatusText" Text="モデルを選んで、準備を始めましょう。" TextWrapping="Wrap" FontSize="13" Margin="0,0,0,12"/>
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+     <StackPanel Orientation="Horizontal"><Button x:Name="StartButton" Content="モデルを準備して開始" Style="{StaticResource Primary}" Click="StartClicked"/><Button x:Name="PauseButton" Content="一時停止" Click="PauseClicked" IsEnabled="False" Margin="8,0,0,0"/></StackPanel>
+     <StackPanel Grid.Column="1" Orientation="Horizontal"><Button x:Name="SaveButton" Content="設定を保存" Click="SaveClicked" Margin="0,0,8,0"/><Button Content="終了" Click="ExitClicked"/></StackPanel>
+    </Grid>
+    <TextBlock x:Name="SaveHint" Text="× でトレイへ  ·  自動起動なし" Style="{StaticResource Muted}" Margin="0,10,0,0"/>
+   </StackPanel>
+  </Border>
+ </Grid>
+ </Border>
+</Window>
