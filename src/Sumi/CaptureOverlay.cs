@@ -122,7 +122,6 @@ internal sealed class CaptureOverlay : Window
         double width = _surface.ActualWidth, height = _surface.ActualHeight;
         var full = new Rect(0, 0, width, height);
         dc.DrawImage(_image, full);
-        Geometry shade = new RectangleGeometry(full);
         Rect? selected = null;
         if (Selection is { } area)
         {
@@ -132,10 +131,8 @@ internal sealed class CaptureOverlay : Window
                 selected = new Rect((r.X - ScreenBounds.X) * width / ScreenBounds.Width,
                     (r.Y - ScreenBounds.Y) * height / ScreenBounds.Height,
                     r.Width * width / ScreenBounds.Width, r.Height * height / ScreenBounds.Height);
-                shade = new CombinedGeometry(GeometryCombineMode.Exclude, shade, new RectangleGeometry(selected.Value));
             }
         }
-        dc.DrawGeometry(new SolidColorBrush(Color.FromArgb(65, 8, 16, 23)), null, shade);
         if (selected is { } s) dc.DrawRectangle(null, new Pen(new SolidColorBrush(Color.FromRgb(178, 227, 214)), 1.5), s);
         else
         {
