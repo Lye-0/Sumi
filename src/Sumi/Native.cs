@@ -27,6 +27,7 @@ internal static class Native
 
     internal static void ConfigureFrame(Window window, Theme theme)
     {
+        window.Icon ??= Branding.WindowIcon;
         var h = new WindowInteropHelper(window).Handle;
         if (h == 0) return;
         int dark = theme == Theme.Dark ? 1 : 0, corners = 2;

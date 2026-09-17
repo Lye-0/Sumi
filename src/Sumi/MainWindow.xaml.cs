@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     private HotkeyRegistration? _stockHotkey;
     private readonly ImageStock _stock = new();
     private Forms.NotifyIcon? _tray;
+    private System.Drawing.Icon? _trayIcon;
     private SumiTrayMenu? _trayMenu;
     private bool _preparing;
     private CancellationTokenSource? _operation;
@@ -68,11 +69,12 @@ public partial class MainWindow : Window
     }
     // Windows shutdown must not be turned into close-to-tray.
     private void OnApplicationSessionEnding(object sender, SessionEndingCancelEventArgs e)
-    { _operation?.Cancel(); _refresh?.Cancel(); _hotkey?.Dispose(); _stockHotkey?.Dispose(); _tray?.Dispose(); _exitAllowed = true; }
+    { _operation?.Cancel(); _refresh?.Cancel(); _hotkey?.Dispose(); _stockHotkey?.Dispose(); _tray?.Dispose(); _trayIcon?.Dispose(); _trayIcon = null; _exitAllowed = true; }
 
     private void SetupTray()
     {
-        _tray = new Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Text = "Sumi · 準備前", Visible = true };
+        _trayIcon = Branding.CreateTrayIcon();
+        _tray = new Forms.NotifyIcon { Icon = _trayIcon, Text = "Sumi · 準備前", Visible = true };
         _trayMenu = new SumiTrayMenu(GetTrayState, ShowSettings, CaptureAsync, CaptureStockAsync,
             ShowRecent, ClearStock, ToggleTrayAsync, ExitAsync, message => { ShowSettings(); Status(message); });
         _tray.MouseUp += (_, e) =>
@@ -512,7 +514,7 @@ public partial class MainWindow : Window
                 return;
             }
         }
-        _answer?.Close(); _hotkey?.Dispose(); _stockHotkey?.Dispose(); _tray?.ContextMenuStrip?.Dispose(); _tray?.Dispose();
+        _answer?.Close(); _hotkey?.Dispose(); _stockHotkey?.Dispose(); _tray?.ContextMenuStrip?.Dispose(); _tray?.Dispose(); _trayIcon?.Dispose(); _trayIcon = null;
         _stock.Clear(); _exitAllowed = true; System.Windows.Application.Current.Shutdown();
     }
 }

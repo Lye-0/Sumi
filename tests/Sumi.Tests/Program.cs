@@ -64,6 +64,11 @@ var panelThread = new Thread(() =>
     try
     {
         var type = typeof(Sumi.App).Assembly.GetType("Sumi.AnswerWindow")!;
+        var branding = typeof(Sumi.App).Assembly.GetType("Sumi.Branding")!;
+        var windowIcon = (System.Windows.Media.Imaging.BitmapFrame)branding.GetProperty("WindowIcon")!.GetValue(null)!;
+        Check(windowIcon.IsFrozen && windowIcon.PixelWidth > 0, "embedded window icon decodes without installation path");
+        using (var trayIcon = (System.Drawing.Icon)branding.GetMethod("CreateTrayIcon")!.Invoke(null, null)!)
+            Check(trayIcon.Width > 0 && trayIcon.Height > 0, "embedded tray icon survives resource stream disposal");
         var window = (System.Windows.Window)Activator.CreateInstance(type, new Settings { ShowThinking = true }, (Action)(() => { }), (Func<string, Task>)(_ => Task.CompletedTask))!;
         var update = type.GetMethod("Update")!;
         var data = new[] { new ThinkingUpdate(1, new string('x', 30000)), new ThinkingUpdate(2, "retry") };
