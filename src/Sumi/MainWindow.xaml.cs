@@ -24,6 +24,7 @@ public partial class MainWindow : Window
     private bool _loaded, _ready, _busy, _exiting, _exitAllowed, _panelDismissed, _syncingModels;
     private string _latest = "";
     private string? _preparedModel;
+    private readonly Dictionary<string, OllamaCli> _sessionProviders = new(StringComparer.OrdinalIgnoreCase);
 
     public MainWindow(SettingsStore store, Settings settings, string? warning)
     {
@@ -66,6 +67,7 @@ public partial class MainWindow : Window
         menu.Items.Add("直近の回答", null, (_, _) => ShowRecent());
         menu.Items.Add("一時停止", null, (_, _) => Pause());
         menu.Items.Add("終了", null, async (_, _) => await ExitAsync());
+        menu.Items.Add("モデルを解放して終了", null, async (_, _) => await ExitAsync(true));
         _tray.ContextMenuStrip = menu;
         _tray.DoubleClick += (_, _) => ShowSettings();
     }
@@ -200,6 +202,7 @@ public partial class MainWindow : Window
     }
     private void UpdateControls()
     {
+        ExitButton.IsEnabled = ReleaseExitButton.IsEnabled = SaveButton.IsEnabled = !_exiting;
         bool canPrepare = !_busy && !_ready && _refresh == null && !_exiting;
         StartButton.IsEnabled = canPrepare;
         ModelBox.IsEnabled = canPrepare; RefreshButton.IsEnabled = canPrepare;
@@ -219,7 +222,8 @@ public partial class MainWindow : Window
         try
         {
             var exe = OllamaCli.ResolveExecutable(_settings.OllamaPath);
-            var provider = new OllamaCli(exe);
+            if (!_sessionProviders.TryGetValue(exe, out var provider))
+                _sessionProviders.Add(exe, provider = new OllamaCli(exe));
             await provider.PrepareAsync(_settings.Model, cts.Token);
             cts.Token.ThrowIfCancellationRequested();
             if (_exiting) return;
@@ -234,6 +238,7 @@ public partial class MainWindow : Window
     private void PauseClicked(object sender, RoutedEventArgs e) => Pause();
     private void Pause()
     {
+        if (_exiting) return;
         _hotkey?.Pause(); _ready = false; _operation?.Cancel(); _capture?.Cancel();
         UpdateControls(); Status("停止中 · モデルを変更するか、そのまま再開できます。");
     }
@@ -348,12 +353,38 @@ public partial class MainWindow : Window
     private void ShowRecentPanel(object sender, RoutedEventArgs e)
     { if (!string.IsNullOrWhiteSpace(_latest)) { _panelDismissed = false; ShowAnswer(_latest, true, _settings); } }
     private async void ExitClicked(object sender, RoutedEventArgs e) => await ExitAsync();
-    private async Task ExitAsync()
+    private async void ReleaseExitClicked(object sender, RoutedEventArgs e) => await ExitAsync(true);
+    private async Task ExitAsync(bool releaseModels = false)
     {
         if (_exiting) return;
         _exiting = true; _ready = false; _hotkey?.Pause(); _operation?.Cancel(); _refresh?.Cancel(); _capture?.Cancel();
+        UpdateControls();
         // Await the process runner's finally, so no child CLI or temporary capture survives a normal exit.
         while (_operation != null || _refresh != null) await Task.Delay(40);
+        if (releaseModels)
+        {
+            ShowSettings();
+            Status("使用したモデルを解放しています…");
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            try
+            {
+                var errors = new List<string>();
+                foreach (var provider in _sessionProviders.Values)
+                {
+                    try { await provider.ReleaseUsedModelsAsync(timeout.Token); }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex) { errors.Add(ex.Message); }
+                }
+                if (errors.Count > 0) throw new InvalidOperationException(string.Join("\n", errors));
+            }
+            catch (Exception ex)
+            {
+                _exiting = false; UpdateControls();
+                Status((ex is OperationCanceledException ? "モデルの解放が時間内に完了しませんでした。" : $"モデルを解放できませんでした。{ex.Message}")
+                    + "\n「モデルを解放して終了」で再試行、または「終了」でSumiだけを終了できます。");
+                return;
+            }
+        }
         _answer?.Close(); _hotkey?.Dispose(); _tray?.ContextMenuStrip?.Dispose(); _tray?.Dispose();
         _exitAllowed = true; System.Windows.Application.Current.Shutdown();
     }

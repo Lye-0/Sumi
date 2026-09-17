@@ -32,6 +32,31 @@ void Check(bool condition, string description)
 async Task Reject(Func<Task> action, string description)
 { try { await action(); } catch (InvalidOperationException) { Check(true, description); return; } throw new Exception("FAIL: " + description); }
 
+var releaseRunner = new FakeRunner();
+var releaseProvider = new OllamaCli("ollama.exe", releaseRunner);
+await releaseProvider.ReleaseUsedModelsAsync(default);
+Check(releaseRunner.Calls.Count == 0, "unused provider does not stop any model");
+await releaseProvider.PrepareAsync("gemma4:12b", default);
+await releaseProvider.PrepareAsync("gemma4:12b", default);
+await releaseProvider.PrepareAsync("second:local", default);
+Check(releaseProvider.UsedModels.Count == 2, "distinct used models retained across preparations");
+releaseRunner.FailStop = true;
+await Reject(() => releaseProvider.ReleaseUsedModelsAsync(default), "stop failures surfaced");
+Check(releaseProvider.UsedModels.Count == 2 && releaseRunner.Calls.Count(c => c.Args[0] == "stop") == 2, "failed releases remain retryable and all models attempted");
+releaseRunner.FailStop = false;
+await releaseProvider.ReleaseUsedModelsAsync(default);
+Check(releaseProvider.UsedModels.Count == 0 && releaseRunner.Calls.Where(c => c.Args[0] == "stop").All(c => c.Args.Count == 2 && c.Input == ""), "release uses CLI stop with exact model argument");
+var releasedCalls = releaseRunner.Calls.Count;
+await releaseProvider.ReleaseUsedModelsAsync(default);
+Check(releaseRunner.Calls.Count == releasedCalls, "successful releases are not repeated");
+await releaseProvider.PrepareAsync("gemma4:12b", default);
+using (var stopped = new CancellationTokenSource())
+{
+    stopped.Cancel();
+    try { await releaseProvider.ReleaseUsedModelsAsync(stopped.Token); throw new Exception("FAIL cancelled stop"); }
+    catch (OperationCanceledException) { Check(releaseProvider.UsedModels.Count == 1, "cancelled release retains pending model"); }
+}
+
 Check(PixelRect.Between(80, 40, -20, -10) == new PixelRect(-20, -10, 100, 50), "reverse drag / negative desktop coordinates");
 Check(new PixelRect(-20, -10, 100, 50).Intersect(new(0, 0, 50, 100)) == new PixelRect(0, 0, 50, 40), "monitor intersection preserves physical pixels");
 Check(Hotkey.Parse("Ctrl + Alt + s") == new Hotkey(3, 83), "hotkey normalization");
@@ -167,6 +192,7 @@ sealed class FakeRunner : ICommandRunner
 {
     public List<(IReadOnlyList<string> Args, string Input)> Calls { get; } = [];
     public bool Remote { get; set; }
+    public bool FailStop { get; set; }
     public Queue<CommandResult> Responses { get; } = new();
     public int GenerationCount { get; private set; }
     public Action<int>? AfterGeneration { get; init; }
@@ -174,6 +200,7 @@ sealed class FakeRunner : ICommandRunner
     {
         Calls.Add((args, input));
         token.ThrowIfCancellationRequested();
+        if (args[0] == "stop" && FailStop) return Task.FromResult(new CommandResult(1, "", "stop failed"));
         if (args[0] == "run" && input.Length > 0)
         {
             GenerationCount++;
@@ -181,7 +208,7 @@ sealed class FakeRunner : ICommandRunner
             progress?.Report(result.Output); AfterGeneration?.Invoke(GenerationCount);
             return Task.FromResult(result);
         }
-        string output = args[0] switch { "ls" => "NAME ID SIZE\ngemma4:12b abc 7 GB\n",
+        string output = args[0] switch { "ls" => "NAME ID SIZE\ngemma4:12b abc 7 GB\nsecond:local def 1 GB\n",
             "show" => Remote ? "Remote URL https://ollama.com\nvision" : "Capabilities\n    vision\n    thinking\n",
             _ => input.Length == 0 ? "" : "<think>test</think>\n42" };
         return Task.FromResult(new CommandResult(0, output, ""));

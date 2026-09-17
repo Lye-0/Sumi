@@ -97,6 +97,24 @@ public sealed class ProcessRunner : ICommandRunner
 public sealed partial class OllamaCli(string executable, ICommandRunner? runner = null) : IModelProvider
 {
     private readonly ICommandRunner _runner = runner ?? new ProcessRunner();
+    private readonly HashSet<string> _usedModels = new(StringComparer.Ordinal);
+    public IReadOnlyCollection<string> UsedModels => _usedModels.ToArray();
+    public async Task ReleaseUsedModelsAsync(CancellationToken token)
+    {
+        var errors = new List<string>();
+        foreach (var model in _usedModels.ToArray())
+        {
+            token.ThrowIfCancellationRequested();
+            try
+            {
+                await RunAsync(["stop", model], "", null, token);
+                _usedModels.Remove(model);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) { errors.Add($"{model}: {ex.Message}"); }
+        }
+        if (errors.Count > 0) throw new InvalidOperationException(string.Join("\n", errors));
+    }
     public string Preview(string model) => $"ollama run {model}";
     public static string ResolveExecutable(string custom)
     {
@@ -142,6 +160,7 @@ public sealed partial class OllamaCli(string executable, ICommandRunner? runner 
     public async Task PrepareAsync(string model, CancellationToken token)
     {
         await ValidateAsync(model, token);
+        _usedModels.Add(model); // A cancelled load may still leave a model resident.
         await RunAsync(["run", model], "", null, token);
     }
     public async Task<string> AnswerAsync(string model, string prompt, string imagePath, IProgress<string>? progress, CancellationToken token, IProgress<string>? status = null)
@@ -156,6 +175,7 @@ public sealed partial class OllamaCli(string executable, ICommandRunner? runner 
             token.ThrowIfCancellationRequested();
             await ValidateAsync(model, token);
             token.ThrowIfCancellationRequested();
+            _usedModels.Add(model);
             var result = await RunAsync(["run", model], input, adapter, token);
             token.ThrowIfCancellationRequested();
             var answer = FinalAnswerText(result.Output).Trim();

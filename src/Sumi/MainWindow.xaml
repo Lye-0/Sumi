@@ -73,8 +73,12 @@
     <TextBlock x:Name="StatusText" Text="モデルを選んで、準備を始めましょう。" TextWrapping="Wrap" FontSize="13" Margin="0,0,0,12"/>
     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
      <StackPanel Orientation="Horizontal"><Button x:Name="StartButton" Content="モデルを準備して開始" Style="{StaticResource Primary}" Click="StartClicked"/><Button x:Name="PauseButton" Content="一時停止" Click="PauseClicked" IsEnabled="False" Margin="8,0,0,0"/></StackPanel>
-     <StackPanel Grid.Column="1" Orientation="Horizontal"><Button x:Name="SaveButton" Content="設定を保存" Click="SaveClicked" Margin="0,0,8,0"/><Button Content="終了" Click="ExitClicked"/></StackPanel>
+     <Button Grid.Column="1" x:Name="SaveButton" Content="設定を保存" Click="SaveClicked"/>
     </Grid>
+    <WrapPanel HorizontalAlignment="Right" Margin="0,12,0,0">
+     <Button x:Name="ExitButton" Content="終了" Style="{StaticResource ExitAction}" Click="ExitClicked" Margin="0,0,8,0" ToolTip="Sumiを終了します。モデルはOllamaの保持設定に従って残ります。"/>
+     <Button x:Name="ReleaseExitButton" Content="モデルを解放して終了" Style="{StaticResource ExitAction}" Click="ReleaseExitClicked" ToolTip="Sumiで使用したモデルをメモリから解放します。同じモデルを利用する他のアプリにも影響します。Ollama本体は終了しません。"/>
+    </WrapPanel>
     <TextBlock x:Name="SaveHint" Text="× でトレイへ  ·  自動起動なし" Style="{StaticResource Muted}" Margin="0,10,0,0"/>
    </StackPanel>
   </Border>
