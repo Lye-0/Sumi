@@ -1,5 +1,6 @@
 <Application x:Class="Sumi.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" ShutdownMode="OnExplicitShutdown">
  <Application.Resources>
+  <SolidColorBrush x:Key="WindowBrush" Color="#FF192129"/>
   <SolidColorBrush x:Key="CanvasBrush" Color="#F01B2128"/>
   <SolidColorBrush x:Key="SurfaceBrush" Color="#A0252E38"/>
   <SolidColorBrush x:Key="InputBrush" Color="#8010151C"/>

@@ -1,12 +1,12 @@
 <Window x:Class="Sumi.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
- Title="Sumi" Width="800" Height="840" MinWidth="700" MinHeight="620" WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize" FontFamily="Yu Gothic UI, Segoe UI" FontSize="14" Foreground="{DynamicResource TextBrush}" Background="Transparent">
- <shell:WindowChrome.WindowChrome><shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="6" CornerRadius="20" GlassFrameThickness="0"/></shell:WindowChrome.WindowChrome>
+ Title="Sumi" Width="800" Height="840" MinWidth="700" MinHeight="620" WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize" FontFamily="Yu Gothic UI, Segoe UI" FontSize="14" Foreground="{DynamicResource TextBrush}" Background="{DynamicResource WindowBrush}">
+ <shell:WindowChrome.WindowChrome><shell:WindowChrome CaptionHeight="76" ResizeBorderThickness="6" CornerRadius="20" GlassFrameThickness="0" UseAeroCaptionButtons="False"/></shell:WindowChrome.WindowChrome>
  <Border Background="{DynamicResource CanvasBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" CornerRadius="18">
  <Grid>
   <Grid.RowDefinitions><RowDefinition Height="76"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-  <Grid Margin="28,12,20,8" MouseLeftButtonDown="TitleDrag">
+  <Grid Margin="28,12,20,8" Background="Transparent">
    <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="Sumi" FontFamily="Segoe UI" FontSize="32" FontWeight="SemiBold"/><TextBlock Text="画面から、ひとつ先へ。" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="18,7,0,0"/></StackPanel>
-   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" shell:WindowChrome.IsHitTestVisibleInChrome="True">
     <Button x:Name="ThemeButton" Content="ライト" Click="ToggleTheme" Padding="12,7" Margin="0,0,10,0" ToolTip="ライト / ダークを切り替える"/>
     <Button Content="−" Click="Minimize" Padding="12,7" Margin="0,0,6,0" AutomationProperties.Name="最小化"/>
     <Button Content="×" Click="HideWindow" Padding="12,7" AutomationProperties.Name="閉じてトレイへ"/>

@@ -41,7 +41,7 @@ public partial class MainWindow : Window
         UpdatePreview();
         SourceInitialized += (_, _) =>
         {
-            Native.Glass(this, _settings.Glass, _settings.Theme);
+            Native.ConfigureFrame(this, _settings.Theme);
             _hotkey = new HotkeyRegistration(this);
             _hotkey.Pressed += async () => await CaptureAsync();
         };
@@ -80,8 +80,6 @@ public partial class MainWindow : Window
     }
     private void ShowSettings() { Show(); WindowState = WindowState.Normal; Activate(); }
     private void ShowRecent() { ShowSettings(); RecentExpander.IsExpanded = true; RecentAnswer.BringIntoView(); }
-    private void TitleDrag(object sender, MouseButtonEventArgs e)
-    { if (e.OriginalSource is not Button && e.LeftButton == MouseButtonState.Pressed) { try { DragMove(); } catch (InvalidOperationException) { } } }
     private void Minimize(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
     private void HideWindow(object sender, RoutedEventArgs e) => Hide();
     private void OnClosing(object? sender, CancelEventArgs e) { if (!_exitAllowed) { e.Cancel = true; Hide(); } }

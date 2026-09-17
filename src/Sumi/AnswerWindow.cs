@@ -18,7 +18,7 @@ internal sealed class AnswerWindow : Window
     {
         Title = "Sumi · 回答"; Width = 380; SizeToContent = SizeToContent.Height;
         FontFamily = new System.Windows.Media.FontFamily("Yu Gothic UI, Segoe UI"); FontSize = 14;
-        SetResourceReference(BackgroundProperty, "CanvasBrush"); SetResourceReference(ForegroundProperty, "TextBrush");
+        SetResourceReference(BackgroundProperty, "WindowBrush"); SetResourceReference(ForegroundProperty, "TextBrush");
         WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = App.UiTest; ShowActivated = false; Topmost = true;
         var stack = new StackPanel { Margin = new Thickness(22, 18, 22, 18) };
@@ -35,6 +35,7 @@ internal sealed class AnswerWindow : Window
         controls.Children.Add(_copy); controls.Children.Add(full); controls.Children.Add(close); stack.Children.Add(controls);
         var border = new Border { Child = stack, CornerRadius = new CornerRadius(18), BorderThickness = new Thickness(1) };
         border.SetResourceReference(Border.BorderBrushProperty, "LineBrush"); Content = border;
+        border.SetResourceReference(Border.BackgroundProperty, "CanvasBrush");
         _timer.Interval = TimeSpan.FromSeconds(Math.Clamp(settings.DisplaySeconds, 3, 120));
         _timer.Tick += (_, _) => Close();
         MouseEnter += (_, _) => _timer.Stop();
@@ -44,7 +45,7 @@ internal sealed class AnswerWindow : Window
         {
             var h = new WindowInteropHelper(this).Handle;
             Native.SetWindowLong(h, -20, Native.GetWindowLong(h, -20) | 0x08000000 | (App.UiTest ? 0 : 0x80));
-            Native.Glass(this, settings.Glass, settings.Theme);
+            Native.ConfigureFrame(this, settings.Theme);
         };
         ContentRendered += (_, _) =>
         {

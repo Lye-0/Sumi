@@ -19,21 +19,17 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern int SetWindowLong(nint h, int index, int value);
     [DllImport("user32.dll")] internal static extern uint GetDpiForWindow(nint h);
     [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(nint h, int attribute, ref int value, int size);
-    [DllImport("dwmapi.dll")] private static extern int DwmExtendFrameIntoClientArea(nint h, ref Margins margins);
     [StructLayout(LayoutKind.Sequential)] internal struct PointI { public int X, Y; }
-    [StructLayout(LayoutKind.Sequential)] private struct Margins { public int L, R, T, B; }
 
-    internal static void Glass(Window window, bool enabled, Theme theme)
+    internal static void ConfigureFrame(Window window, Theme theme)
     {
         var h = new WindowInteropHelper(window).Handle;
         if (h == 0) return;
-        int dark = theme == Theme.Dark ? 1 : 0, corners = 2, backdrop = enabled ? 3 : 1;
+        int dark = theme == Theme.Dark ? 1 : 0, corners = 2;
         DwmSetWindowAttribute(h, 20, ref dark, 4);
         DwmSetWindowAttribute(h, 33, ref corners, 4);
-        DwmSetWindowAttribute(h, 38, ref backdrop, 4);
-        var margins = new Margins { L = -1, R = -1, T = -1, B = -1 };
-        DwmExtendFrameIntoClientArea(h, ref margins);
-        if (HwndSource.FromHwnd(h)?.CompositionTarget is { } target) target.BackgroundColor = Colors.Transparent;
+        // WindowChrome owns the non-client frame. Do not extend DWM glass or
+        // reset the WPF composition target here, especially during theme changes.
     }
 }
 
@@ -42,15 +38,24 @@ internal static class Appearance
     public static void Apply(Theme theme, bool glass)
     {
         bool dark = theme == Theme.Dark;
-        Set("CanvasBrush", dark ? (glass ? "#EB192129" : "#FF192129") : (glass ? "#F0F1F6F8" : "#FFF1F6F8"));
-        Set("SurfaceBrush", dark ? "#902B3742" : "#C8FFFFFF");
-        Set("InputBrush", dark ? "#9010161E" : "#C4FFFFFF");
+        Set("WindowBrush", dark ? "#FF192129" : "#FFF1F6F8");
+        // Glass-like layers remain inside WPF, over an always-opaque window.
+        // Native full-window transparency can blank the surface during redraw.
+        var canvas = glass
+            ? (Brush)new LinearGradientBrush((Color)ColorConverter.ConvertFromString(dark ? "#26343E" : "#FAFDFE"),
+                (Color)ColorConverter.ConvertFromString(dark ? "#192129" : "#ECF2F5"), 65)
+            : new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? "#192129" : "#F1F6F8"));
+        canvas.Freeze();
+        System.Windows.Application.Current.Resources["CanvasBrush"] = canvas;
+        Set("SurfaceBrush", dark ? (glass ? "#902B3742" : "#FF232D37") : (glass ? "#C8FFFFFF" : "#FFFFFFFF"));
+        Set("InputBrush", dark ? (glass ? "#9010161E" : "#FF161D25") : (glass ? "#C4FFFFFF" : "#FFFFFFFF"));
         Set("LineBrush", dark ? "#48596F7D" : "#40778991");
         Set("TextBrush", dark ? "#F0F5F7" : "#202F38");
         Set("MutedBrush", dark ? "#ABBDCA" : "#596D79");
         Set("AccentBrush", dark ? "#B2E3D6" : "#235F53");
         Set("AccentTextBrush", dark ? "#102E28" : "#FFFFFF");
-        foreach (Window w in System.Windows.Application.Current.Windows) Native.Glass(w, glass, theme);
+        foreach (Window w in System.Windows.Application.Current.Windows)
+            if (w is MainWindow or AnswerWindow) Native.ConfigureFrame(w, theme);
     }
     private static void Set(string key, string color) => System.Windows.Application.Current.Resources[key] =
         new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
