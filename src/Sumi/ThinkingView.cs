@@ -13,6 +13,10 @@ internal sealed class ThinkingView : Expander
     public ThinkingView(Func<string, Task> copy)
     {
         _copy = copy; Header = "思考内容"; Content = _items;
+        // Implicit styles use the exact runtime type: this subclass must opt in
+        // to the application's Expander template instead of the OS default.
+        SetResourceReference(StyleProperty, typeof(Expander));
+        SetResourceReference(ForegroundProperty, "TextBrush");
         Visibility = Visibility.Collapsed;
     }
     public void Update(ThinkingUpdate[] attempts)
@@ -27,7 +31,9 @@ internal sealed class ThinkingView : Expander
                     MaxHeight = 240, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
                 AutomationProperties.SetName(box, $"思考内容 · {label}");
                 _texts.Add(attempt.Attempt, box);
-                _items.Children.Add(new TextBlock { Text = label, Margin = new Thickness(0, 6, 0, 6) });
+                var heading = new TextBlock { Text = label, Margin = new Thickness(0, 6, 0, 6) };
+                heading.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
+                _items.Children.Add(heading);
                 _items.Children.Add(box);
                 var captured = box;
                 var button = new Button { Content = "思考内容をコピー", HorizontalAlignment = HorizontalAlignment.Right,

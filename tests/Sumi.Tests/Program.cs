@@ -50,6 +50,14 @@ var panelThread = new Thread(() =>
         update.Invoke(window, ["error", true, true, data]);
         var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
         var expander = (System.Windows.Controls.Expander)type.GetField("_thinking", flags)!.GetValue(window)!;
+        var expanderStyle = new System.Windows.Style(typeof(System.Windows.Controls.Expander));
+        window.Resources[typeof(System.Windows.Controls.Expander)] = expanderStyle;
+        window.Resources["TextBrush"] = System.Windows.Media.Brushes.White;
+        var heading = (System.Windows.Controls.TextBlock)((System.Windows.Controls.StackPanel)expander.Content).Children[0];
+        Check(ReferenceEquals(expander.Style, expanderStyle) && ReferenceEquals(expander.Foreground, System.Windows.Media.Brushes.White)
+            && ReferenceEquals(heading.Foreground, System.Windows.Media.Brushes.White), "thinking subclass uses themed expander style and dark foreground");
+        window.Resources["TextBrush"] = System.Windows.Media.Brushes.Black;
+        Check(ReferenceEquals(expander.Foreground, System.Windows.Media.Brushes.Black) && ReferenceEquals(heading.Foreground, System.Windows.Media.Brushes.Black), "thinking labels follow live light theme changes");
         var timer = (System.Windows.Threading.DispatcherTimer)type.GetField("_timer", flags)!.GetValue(window)!;
         var copy = (System.Windows.Controls.Button)type.GetField("_copy", flags)!.GetValue(window)!;
         Check(expander.Visibility == System.Windows.Visibility.Visible && !timer.IsEnabled && !copy.IsEnabled, "error preserves accordion, disables final copy and auto-dismiss");
