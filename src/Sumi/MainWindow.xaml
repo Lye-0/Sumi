@@ -33,9 +33,12 @@
      <StackPanel Grid.Column="2">
       <TextBlock Text="回答の受け取り方" FontWeight="SemiBold" Margin="0,6,0,15"/>
       <ComboBox x:Name="DeliveryBox" SelectedValuePath="Tag" AutomationProperties.Name="回答の受け取り方" SelectionChanged="EditedSelection"><ComboBoxItem Content="小型パネル" Tag="{x:Static core:Delivery.Panel}"/><ComboBoxItem Content="最小の通知" Tag="{x:Static core:Delivery.Minimal}"/><ComboBoxItem Content="クリップボード" Tag="{x:Static core:Delivery.Clipboard}"/><ComboBoxItem Content="小型パネル ＋ クリップボード" Tag="{x:Static core:Delivery.Both}"/><ComboBoxItem Content="最小の通知 ＋ クリップボード" Tag="{x:Static core:Delivery.MinimalBoth}"/></ComboBox>
-      <TextBlock Text="撮影ショートカット" Style="{StaticResource Muted}" Margin="0,13,0,6"/>
+      <TextBlock Text="撮影・送信ショートカット" Style="{StaticResource Muted}" Margin="0,13,0,6"/>
       <local:ShortcutBox x:Name="HotkeyBox" Text="Ctrl+Alt+S" Style="{StaticResource CompactTextBox}" AutomationProperties.Name="撮影ショートカットを記録" TextChanged="Edited" GotKeyboardFocus="ShortcutFocusEntered" LostKeyboardFocus="ShortcutFocusLeft"/>
-      <TextBlock x:Name="ShortcutHint" Text="クリックしてキーの組み合わせを入力" Style="{StaticResource Muted}" Margin="0,6,0,0"/>
+      <TextBlock x:Name="ShortcutHint" Text="クリックしてキーの組み合わせを入力" Style="{StaticResource Muted}" Margin="0,6,0,0"/>      <TextBlock Text="ストック用ショートカット" Style="{StaticResource Muted}" Margin="0,12,0,6"/>
+      <local:ShortcutBox x:Name="StockHotkeyBox" Style="{StaticResource CompactTextBox}" AutomationProperties.Name="ストック用ショートカットを記録" TextChanged="Edited" GotKeyboardFocus="ShortcutFocusEntered" LostKeyboardFocus="ShortcutFocusLeft"/>
+      <TextBlock Text="ストックがあるときは、撮影・送信キーで全画像を送信します。" Style="{StaticResource Muted}" Margin="0,6,0,0"/>
+      <StackPanel Orientation="Horizontal" Margin="0,8,0,0"><TextBlock x:Name="StockCount" Text="ストック：0枚" VerticalAlignment="Center"/><Button x:Name="ClearStockButton" Content="破棄" Click="ClearStockClicked" Padding="10,4" Margin="10,0,0,0" ToolTip="ストックした画像をすべて破棄"/></StackPanel>
      </StackPanel>
     </Grid>
     <Expander Header="表示と詳細設定" Margin="0,16,0,0">

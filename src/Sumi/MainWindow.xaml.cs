@@ -16,6 +16,8 @@ public partial class MainWindow : Window
     private Settings _settings;
     private IModelProvider? _provider;
     private HotkeyRegistration? _hotkey;
+    private HotkeyRegistration? _stockHotkey;
+    private readonly ImageStock _stock = new();
     private Forms.NotifyIcon? _tray;
     private CancellationTokenSource? _operation;
     private CancellationTokenSource? _refresh;
@@ -36,6 +38,7 @@ public partial class MainWindow : Window
         _recentThinking = new ThinkingView(CopyTextAsync); RecentThinkingHost.Children.Add(_recentThinking);
         ThinkingCheck.IsChecked = settings.ShowThinking;
         PromptBox.Text = settings.Prompt; HotkeyBox.Text = settings.Hotkey;
+        StockHotkeyBox.Text = settings.StockHotkey;
         DeliveryBox.SelectedValue = settings.Delivery;
         ModelBox.Items.Add(settings.Model); ModelBox.SelectedItem = settings.Model;
         GlassCheck.IsChecked = settings.Glass; SaveImagesCheck.IsChecked = settings.SaveImages;
@@ -50,6 +53,8 @@ public partial class MainWindow : Window
             Native.ConfigureFrame(this, _settings.Theme);
             _hotkey = new HotkeyRegistration(this);
             _hotkey.Pressed += async () => await CaptureAsync();
+            _stockHotkey = new HotkeyRegistration(this, 702);
+            _stockHotkey.Pressed += async () => await CaptureStockAsync();
         };
         Loaded += async (_, _) =>
         {
@@ -61,7 +66,7 @@ public partial class MainWindow : Window
     }
     // Windows shutdown must not be turned into close-to-tray.
     private void OnApplicationSessionEnding(object sender, SessionEndingCancelEventArgs e)
-    { _operation?.Cancel(); _refresh?.Cancel(); _hotkey?.Dispose(); _tray?.Dispose(); _exitAllowed = true; }
+    { _operation?.Cancel(); _refresh?.Cancel(); _hotkey?.Dispose(); _stockHotkey?.Dispose(); _tray?.Dispose(); _exitAllowed = true; }
 
     private void SetupTray()
     {
@@ -69,6 +74,8 @@ public partial class MainWindow : Window
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("Sumiを開く", null, (_, _) => ShowSettings());
         menu.Items.Add("撮影", null, async (_, _) => await CaptureAsync());
+        menu.Items.Add("撮影してストック", null, async (_, _) => await CaptureStockAsync());
+        menu.Items.Add("ストックを破棄", null, (_, _) => ClearStock());
         menu.Items.Add("直近の回答", null, (_, _) => ShowRecent());
         menu.Items.Add("一時停止", null, (_, _) => Pause());
         menu.Items.Add("終了", null, async (_, _) => await ExitAsync());
@@ -83,7 +90,8 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
 #endif
         StatusText.Text = text;
-        if (_tray != null) _tray.Text = _busy ? "Sumi · 処理中" : _ready ? "Sumi · 待機中" : "Sumi · 停止中";
+        StockCount.Text = $"ストック：{_stock.Count}枚";
+        if (_tray != null) _tray.Text = (_busy ? "Sumi · 処理中" : _ready ? "Sumi · 待機中" : "Sumi · 停止中") + $" · ストック{_stock.Count}枚";
     }
     private void ShowSettings() { Show(); WindowState = WindowState.Normal; Activate(); }
     private void ShowRecent() { ShowSettings(); RecentExpander.IsExpanded = true; RecentAnswer.BringIntoView(); }
@@ -111,7 +119,7 @@ public partial class MainWindow : Window
     private void ShortcutFocusEntered(object sender, KeyboardFocusChangedEventArgs e)
     {
         if (!_loaded) return;
-        _hotkey?.Pause();
+        _hotkey?.Pause(); _stockHotkey?.Pause();
         ShortcutHint.Text = "キーを押してください · Escで終了 · 保存すると反映";
     }
     private void ShortcutFocusLeft(object sender, KeyboardFocusChangedEventArgs e)
@@ -119,7 +127,7 @@ public partial class MainWindow : Window
         if (!_loaded) return;
         ShortcutHint.Text = "クリックしてキーの組み合わせを入力";
         if (!_ready || _exiting) return;
-        try { _hotkey!.Register(_settings.Hotkey); }
+        try { RegisterShortcuts(_settings); }
         catch (Exception ex) { _ready = false; UpdateControls(); Status(ex.Message); }
     }
 
@@ -153,7 +161,7 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(PromptBox.Text)) throw new InvalidOperationException("画像への指示を入力してください。");
         var model = ModelBox.SelectedItem as string;
         if (string.IsNullOrWhiteSpace(model)) throw new InvalidOperationException("ローカルモデルを選択してください。");
-        Hotkey.Parse(HotkeyBox.Text);
+        if (Hotkey.Parse(HotkeyBox.Text) == Hotkey.Parse(StockHotkeyBox.Text)) throw new InvalidOperationException("送信とストックのショートカットは別の組み合わせにしてください。");
         if (!int.TryParse(SecondsBox.Text, out var seconds) || seconds is < 3 or > 120)
             throw new InvalidOperationException("表示秒数は3〜120を指定してください。");
         if (!int.TryParse(TimeoutBox.Text, out var timeout) || timeout is < 30 or > 1800)
@@ -161,7 +169,7 @@ public partial class MainWindow : Window
         var imageDirectory = ImageDirectoryBox.Text.Trim();
         if (imageDirectory.Length > 0 && !Path.IsPathFullyQualified(imageDirectory))
             throw new InvalidOperationException("画像の保存先は絶対パスで指定してください。");
-        return _settings with { Prompt = PromptBox.Text, Model = model, Hotkey = HotkeyBox.Text.Trim(),
+        return _settings with { Prompt = PromptBox.Text, Model = model, Hotkey = HotkeyBox.Text.Trim(), StockHotkey = StockHotkeyBox.Text.Trim(),
             Delivery = (Delivery)DeliveryBox.SelectedValue, Glass = GlassCheck.IsChecked == true,
             SaveImages = SaveImagesCheck.IsChecked == true, CopyImages = CopyImagesCheck.IsChecked == true, ShowThinking = ThinkingCheck.IsChecked == true,
             ImageDirectory = imageDirectory, OllamaPath = OllamaPathBox.Text.Trim(), DisplaySeconds = seconds, TimeoutSeconds = timeout };
@@ -169,10 +177,14 @@ public partial class MainWindow : Window
     private void SaveSettings()
     {
         var next = ReadSettings();
-        bool rebind = _ready && Hotkey.Parse(next.Hotkey) != Hotkey.Parse(_settings.Hotkey);
-        if (rebind) _hotkey!.Register(next.Hotkey);
+        bool rebind = _ready && (Hotkey.Parse(next.Hotkey) != Hotkey.Parse(_settings.Hotkey) || Hotkey.Parse(next.StockHotkey) != Hotkey.Parse(_settings.StockHotkey));
+        if (rebind)
+        {
+            try { RegisterShortcuts(next); }
+            catch { RestoreShortcuts(); throw; }
+        }
         try { _store.Save(next); }
-        catch { if (rebind) _hotkey!.Register(_settings.Hotkey); throw; }
+        catch { if (rebind) RestoreShortcuts(); throw; }
         _settings = next;
         if (!next.ShowThinking) { _thoughts = new(); _recentThinking.Clear(); _answer?.ClearThinking(); }
         SaveHint.Text = "保存済み  ·  × でトレイへ  ·  自動起動なし";
@@ -213,16 +225,16 @@ public partial class MainWindow : Window
         StartButton.IsEnabled = canPrepare;
         ModelBox.IsEnabled = canPrepare; RefreshButton.IsEnabled = canPrepare;
         OllamaPathBox.IsEnabled = canPrepare; OllamaBrowseButton.IsEnabled = canPrepare;
-        HotkeyBox.IsEnabled = !_busy && !_exiting;
+        HotkeyBox.IsEnabled = StockHotkeyBox.IsEnabled = ClearStockButton.IsEnabled = !_busy && !_exiting;
         PauseButton.IsEnabled = (_busy || _ready) && !_exiting;
         PauseButton.Content = _busy ? "キャンセル" : "一時停止";
-        if (_tray != null) _tray.Text = _busy ? "Sumi · 処理中" : _ready ? "Sumi · 待機中" : "Sumi · 停止中";
+        if (_tray != null) _tray.Text = (_busy ? "Sumi · 処理中" : _ready ? "Sumi · 待機中" : "Sumi · 停止中") + $" · ストック{_stock.Count}枚";
     }
     private async void StartClicked(object sender, RoutedEventArgs e)
     {
         if (_busy || _ready || _refresh != null || _exiting) return;
         try { SaveSettings(); } catch (Exception ex) { Status(ex.Message); return; }
-        _hotkey?.Pause(); _ready = false; SetBusy(true);
+        _hotkey?.Pause(); _stockHotkey?.Pause(); _ready = false; SetBusy(true);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(_settings.TimeoutSeconds)); _operation = cts;
         Status("モデルを準備中… 終わるとショートカットが有効になります。");
         try
@@ -233,7 +245,7 @@ public partial class MainWindow : Window
             await provider.PrepareAsync(_settings.Model, cts.Token);
             cts.Token.ThrowIfCancellationRequested();
             if (_exiting) return;
-            _hotkey!.Register(_settings.Hotkey);
+            RegisterShortcuts(_settings);
             _provider = provider; _preparedModel = _settings.Model; _ready = true;
             Status($"待機中 · {_settings.Hotkey} で範囲を選択。× で閉じても使えます。");
         }
@@ -245,8 +257,46 @@ public partial class MainWindow : Window
     private void Pause()
     {
         if (_exiting) return;
-        _hotkey?.Pause(); _ready = false; _operation?.Cancel(); _capture?.Cancel();
+        _hotkey?.Pause(); _stockHotkey?.Pause(); _ready = false; _operation?.Cancel(); _capture?.Cancel();
         UpdateControls(); Status("停止中 · モデルを変更するか、そのまま再開できます。");
+    }
+    private void RegisterShortcuts(Settings settings)
+    {
+        _hotkey?.Pause(); _stockHotkey?.Pause();
+        try { _hotkey!.Register(settings.Hotkey); _stockHotkey!.Register(settings.StockHotkey); }
+        catch { _hotkey?.Pause(); _stockHotkey?.Pause(); throw; }
+    }
+    private void RestoreShortcuts()
+    {
+        try { RegisterShortcuts(_settings); }
+        catch { _ready = false; UpdateControls(); throw; }
+    }
+    private void ClearStockClicked(object sender, RoutedEventArgs e) => ClearStock();
+    private void ClearStock()
+    {
+        if (_busy || _exiting) return;
+        _stock.Clear(); Status("ストックを破棄しました。");
+    }
+    private async Task CaptureStockAsync()
+    {
+        if (_exiting || _busy) return;
+        if (!_ready) { ShowSettings(); Status("先にモデルを準備して開始してください。"); return; }
+        if (_stock.Count >= ImageStock.MaxImages) { Status("ストックは20枚までです。送信するか破棄してください。"); return; }
+        SetBusy(true); _answer?.Close();
+        using var cts = new CancellationTokenSource(); _operation = cts;
+        try
+        {
+            Hide(); await Task.Delay(120, cts.Token);
+            CaptureResult? result;
+            using (var capture = new CaptureSession())
+            { _capture = capture; result = await capture.RunAsync(); }
+            _capture = null; cts.Token.ThrowIfCancellationRequested();
+            if (result != null) _stock.Add(result.Png);
+            Status($"ストック：{_stock.Count}枚 · {_settings.Hotkey} でまとめて送信します。");
+        }
+        catch (OperationCanceledException) { Status($"撮影を中断しました。ストック：{_stock.Count}枚"); }
+        catch (Exception ex) { Status(ex.Message); if (!_exiting) ShowSettings(); }
+        finally { _capture = null; _operation = null; SetBusy(false); }
     }
     private async Task CaptureAsync()
     {
@@ -269,23 +319,33 @@ public partial class MainWindow : Window
         };
         if (settings.ShowThinking) thoughtTimer.Start();
         using var cts = new CancellationTokenSource(); _operation = cts;
-        string? temp = null;
+        var temps = new List<string>();
+        bool fromStock = _stock.Count > 0;
         try
         {
             if (IsVisible) Hide();
             await Task.Delay(120, cts.Token); // Let our windows disappear before freezing the desktop.
-            Status("範囲を選択中 · Escでキャンセルできます。");
-            CaptureResult? result;
-            using (var capture = new CaptureSession())
-            { _capture = capture; result = await capture.RunAsync(); }
-            _capture = null;
-            cts.Token.ThrowIfCancellationRequested();
-            if (result == null) { Status("待機中 · 撮影をキャンセルしました。"); return; }
+            byte[][] images;
+            if (fromStock) images = _stock.Snapshot();
+            else
+            {
+                Status("範囲を選択中 · Escでキャンセルできます。");
+                CaptureResult? result;
+                using (var capture = new CaptureSession())
+                { _capture = capture; result = await capture.RunAsync(); }
+                _capture = null;
+                cts.Token.ThrowIfCancellationRequested();
+                if (result == null) { Status("待機中 · 撮影をキャンセルしました。"); return; }
+                images = [result.Png];
+            }
             cts.CancelAfter(TimeSpan.FromSeconds(settings.TimeoutSeconds));
             var tempRoot = Path.Combine(_store.Root, "temp"); Directory.CreateDirectory(tempRoot);
-            temp = Path.Combine(tempRoot, $"capture-{Guid.NewGuid():N}.png");
-            await File.WriteAllBytesAsync(temp, result.Png, cts.Token);
             string? sideEffectWarning = null;
+            foreach (var png in images)
+            {
+            var temp = Path.Combine(tempRoot, $"capture-{Guid.NewGuid():N}.png");
+            temps.Add(temp);
+            await File.WriteAllBytesAsync(temp, png, cts.Token);
             if (settings.SaveImages)
             {
                 try
@@ -293,16 +353,17 @@ public partial class MainWindow : Window
                     var folder = string.IsNullOrWhiteSpace(settings.ImageDirectory)
                         ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Sumi") : settings.ImageDirectory;
                     Directory.CreateDirectory(folder);
-                    await File.WriteAllBytesAsync(Path.Combine(folder, $"Sumi-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.png"), result.Png, cts.Token);
+                    await File.WriteAllBytesAsync(Path.Combine(folder, $"Sumi-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.png"), png, cts.Token);
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { sideEffectWarning = "画像の保存に失敗しました。"; }
             }
             if (settings.CopyImages)
             {
-                try { await CopyImageAsync(result.Png); }
+                try { await CopyImageAsync(png); }
                 catch (System.Runtime.InteropServices.COMException) { sideEffectWarning = "画像をコピーできませんでした。"; }
             }
-            Status("回答を生成中…");
+            }
+            Status($"{images.Length}枚の画像から回答を生成中…");
             var progress = new Progress<string>(text =>
             {
                 if (generationComplete || cts.IsCancellationRequested || _exiting || _operation != cts || string.IsNullOrWhiteSpace(text)) return;
@@ -313,12 +374,13 @@ public partial class MainWindow : Window
             {
                 if (!cts.IsCancellationRequested && !_exiting && _operation == cts) Status(text);
             });
-            var answer = await provider.AnswerAsync(settings.Model, settings.Prompt, temp, progress, cts.Token, generationStatus,
+            var answer = await provider.AnswerAsync(settings.Model, settings.Prompt, temps, progress, cts.Token, generationStatus,
                 settings.ShowThinking || settings.Delivery is (Delivery.Clipboard or Delivery.Both or Delivery.MinimalBoth) ? thoughts : null);
             thoughtTimer.Stop();
             generationComplete = true;
             cts.Token.ThrowIfCancellationRequested();
             _latest = answer; RecentAnswer.Text = answer;
+            if (fromStock) _stock.Clear();
             if (settings.Delivery is Delivery.Clipboard or Delivery.Both or Delivery.MinimalBoth)
             {
                 try { await SetClipboardAsync(() => System.Windows.Clipboard.SetText(answer)); }
@@ -363,7 +425,7 @@ public partial class MainWindow : Window
             if (settings.ShowThinking && _settings.ShowThinking) _recentThinking.Update(thoughts.Snapshot());
             else _thoughts = new();
             _capture = null;
-            if (temp != null) { try { File.Delete(temp); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status("一時画像を削除できませんでした。設定フォルダーのtempを確認してください。"); } }
+            foreach (var temp in temps) { try { File.Delete(temp); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status("一時画像を削除できませんでした。設定フォルダーのtempを確認してください。"); } }
             _operation = null; SetBusy(false);
         }
     }
@@ -406,7 +468,7 @@ public partial class MainWindow : Window
     private async Task ExitAsync(bool releaseModels = false)
     {
         if (_exiting) return;
-        _exiting = true; _ready = false; _hotkey?.Pause(); _operation?.Cancel(); _refresh?.Cancel(); _capture?.Cancel();
+        _exiting = true; _ready = false; _hotkey?.Pause(); _stockHotkey?.Pause(); _operation?.Cancel(); _refresh?.Cancel(); _capture?.Cancel();
         UpdateControls();
         // Await the process runner's finally, so no child CLI or temporary capture survives a normal exit.
         while (_operation != null || _refresh != null) await Task.Delay(40);
@@ -434,7 +496,7 @@ public partial class MainWindow : Window
                 return;
             }
         }
-        _answer?.Close(); _hotkey?.Dispose(); _tray?.ContextMenuStrip?.Dispose(); _tray?.Dispose();
-        _exitAllowed = true; System.Windows.Application.Current.Shutdown();
+        _answer?.Close(); _hotkey?.Dispose(); _stockHotkey?.Dispose(); _tray?.ContextMenuStrip?.Dispose(); _tray?.Dispose();
+        _stock.Clear(); _exitAllowed = true; System.Windows.Application.Current.Shutdown();
     }
 }

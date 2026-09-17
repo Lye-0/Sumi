@@ -6,6 +6,7 @@ namespace Sumi.Core;
 
 public interface IModelProvider
 {
+    Task<string> AnswerAsync(string model, string prompt, IReadOnlyList<string> imagePaths, IProgress<string>? progress, CancellationToken token, IProgress<string>? status = null, IProgress<ThinkingUpdate>? thinking = null);
     Task<IReadOnlyList<string>> ListModelsAsync(CancellationToken token);
     Task PrepareAsync(string model, CancellationToken token);
     Task<string> AnswerAsync(string model, string prompt, string imagePath, IProgress<string>? progress, CancellationToken token, IProgress<string>? status = null, IProgress<ThinkingUpdate>? thinking = null);
@@ -163,11 +164,16 @@ public sealed partial class OllamaCli(string executable, ICommandRunner? runner 
         _usedModels.Add(model); // A cancelled load may still leave a model resident.
         await RunAsync(["run", model], "", null, token);
     }
-    public async Task<string> AnswerAsync(string model, string prompt, string imagePath, IProgress<string>? progress, CancellationToken token, IProgress<string>? status = null, IProgress<ThinkingUpdate>? thinking = null)
+    public Task<string> AnswerAsync(string model, string prompt, string imagePath, IProgress<string>? progress, CancellationToken token, IProgress<string>? status = null, IProgress<ThinkingUpdate>? thinking = null)
+        => AnswerAsync(model, prompt, new[] { imagePath }, progress, token, status, thinking);
+    public async Task<string> AnswerAsync(string model, string prompt, IReadOnlyList<string> imagePaths, IProgress<string>? progress, CancellationToken token, IProgress<string>? status = null, IProgress<ThinkingUpdate>? thinking = null)
     {
-        if (!File.Exists(imagePath)) throw new FileNotFoundException("撮影画像が見つかりません。", imagePath);
+        var paths = imagePaths.Select(Path.GetFullPath).ToArray();
+        if (paths.Length == 0) throw new ArgumentException("送信する画像がありません。", nameof(imagePaths));
+        foreach (var path in paths)
+            if (!File.Exists(path)) throw new FileNotFoundException("撮影画像が見つかりません。", path);
         // Pass text as stdin, never shell code or additional command-line arguments.
-        var input = $"{Path.GetFullPath(imagePath)}\n{prompt}";
+        var input = $"{string.Join("\n", paths)}\n{prompt}";
         for (int attempt = 0; attempt < 2; attempt++)
         {
             var attemptNumber = attempt + 1;

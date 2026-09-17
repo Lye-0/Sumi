@@ -33,6 +33,13 @@ async Task Reject(Func<Task> action, string description)
 { try { await action(); } catch (InvalidOperationException) { Check(true, description); return; } throw new Exception("FAIL: " + description); }
 
 Check(!new Settings().ShowThinking, "thinking display defaults off");
+var stock = new ImageStock();
+stock.Add([1]); stock.Add([2, 3]);
+Check(stock.Count == 2 && stock.Bytes == 3 && stock.Snapshot()[1].SequenceEqual(new byte[] { 2, 3 }), "stock preserves capture order and byte count");
+stock.Clear(); Check(stock.Count == 0 && stock.Bytes == 0, "stock clear releases all references");
+for (int n = 0; n < ImageStock.MaxImages; n++) stock.Add([1]);
+await Reject(() => { stock.Add([2]); return Task.CompletedTask; }, "stock count is bounded");
+Check(Hotkey.Parse(new Settings().StockHotkey) != Hotkey.Parse(new Settings().Hotkey), "default stock and send shortcuts differ");
 Check(OllamaCli.ThinkingText("Thinking...\nreason\n...done thinking.\nD", true) == "reason", "CLI thinking separated from answer");
 Check(OllamaCli.ThinkingText("<think>reason</think>D", true) == "reason", "tagged thinking separated from answer");
 Check(OllamaCli.ThinkingText("<think>unfinished", true) == "unfinished", "unfinished thinking retained at EOF");
@@ -169,6 +176,12 @@ try
     store.Save(new Settings { Prompt = "日本語\n\"引用\"", Delivery = Delivery.Both });
     Check(store.Load().Prompt == "日本語\n\"引用\"" && store.Load().Delivery == Delivery.Both, "atomic settings round trip");
     var file = Path.Combine(root, "検証 画像.png"); await File.WriteAllTextAsync(file, "fixture");
+    var secondFile = Path.Combine(root, "検証 画像2.png"); await File.WriteAllTextAsync(secondFile, "fixture2");
+    var multiRunner = new FakeRunner();
+    multiRunner.Responses.Enqueue(new(0, "Thinking...only", ""));
+    multiRunner.Responses.Enqueue(new(0, "both", ""));
+    var multiAnswer = await new OllamaCli("ollama.exe", multiRunner).AnswerAsync("gemma4:12b", "both images", new[] { file, secondFile }, null, default);
+    Check(multiAnswer == "both" && multiRunner.Calls.Where(c => c.Args[0] == "run").All(c => c.Input == $"{file}\n{secondFile}\nboth images"), "multi-image CLI input and retries preserve order and prompt");
     var fake = new FakeRunner(); var provider = new OllamaCli("ollama.exe", fake);
     await provider.PrepareAsync("gemma4:12b", default);
     Check(fake.Calls[^1].Args.SequenceEqual(new[] { "run", "gemma4:12b" }) && fake.Calls[^1].Input == "", "preload = default run with EOF");
@@ -249,6 +262,22 @@ try
     bool alive;
     try { using var child = Process.GetProcessById(childId); alive = !child.HasExited; } catch (ArgumentException) { alive = false; }
     Check(childId > 0 && !alive, "cancellation terminates and reaps owned child");
+    if (args.Contains("--live-multi"))
+    {
+        foreach (var item in new[] { (Path: file, Text: "731"), (Path: secondFile, Text: "284") })
+        {
+            using var bitmap = new Bitmap(400, 180);
+            using var graphics = Graphics.FromImage(bitmap); graphics.Clear(Color.White);
+            using var font = new Font("Segoe UI", 62, FontStyle.Bold);
+            graphics.DrawString(item.Text, font, Brushes.Black, new PointF(30, 30));
+            bitmap.Save(item.Path, System.Drawing.Imaging.ImageFormat.Png);
+        }
+        var live = new OllamaCli(OllamaCli.ResolveExecutable(""));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+        var answer = await live.AnswerAsync("gemma4:12b", "添付された2枚の画像に書かれた数字を、画像の順番に1行で列挙してください。最終回答には数字のみを書いてください。", new[] { file, secondFile }, null, timeout.Token);
+        Console.WriteLine($"LIVE multi: {answer}");
+        Check(answer.Contains("731") && answer.Contains("284"), "real gemma4 receives both images in one CLI invocation");
+    }
     if (args.Contains("--live"))
     {
         using (var bitmap = new Bitmap(640, 300))

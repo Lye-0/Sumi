@@ -11,6 +11,7 @@ public sealed record Settings
     public string Model { get; init; } = "gemma4:12b";
     public string OllamaPath { get; init; } = "";
     public string Hotkey { get; init; } = "Ctrl+Alt+S";
+    public string StockHotkey { get; init; } = "Ctrl+Alt+Shift+S";
     public Delivery Delivery { get; init; } = Delivery.Panel;
     public Theme Theme { get; init; } = Theme.Dark;
     public bool Glass { get; init; } = true;
@@ -32,7 +33,7 @@ public sealed class SettingsStore(string root)
         if (!File.Exists(path)) return new();
         var value = JsonSerializer.Deserialize<Settings>(File.ReadAllText(path), Json)
             ?? throw new InvalidDataException("設定ファイルを読み取れません。");
-        if (value.Prompt == null || value.Model == null || value.Hotkey == null || value.OllamaPath == null || value.ImageDirectory == null
+        if (value.Prompt == null || value.Model == null || value.Hotkey == null || value.StockHotkey == null || value.OllamaPath == null || value.ImageDirectory == null
             || !Enum.IsDefined(value.Theme) || !Enum.IsDefined(value.Delivery)
             || value.DisplaySeconds is < 3 or > 120 || value.TimeoutSeconds is < 30 or > 1800)
             throw new InvalidDataException("設定値が範囲外です。設定ファイルを確認してください。");

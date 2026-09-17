@@ -65,11 +65,13 @@ internal sealed class HotkeyRegistration : IDisposable
 {
     private readonly nint _handle;
     private readonly HwndSource _source;
-    private int _id = 700;
+    private int _id;
+    private readonly int _firstId;
     private bool _registered;
     public event Action? Pressed;
-    public HotkeyRegistration(Window window)
+    public HotkeyRegistration(Window window, int firstId = 700)
     {
+        _firstId = firstId; _id = firstId;
         _handle = new WindowInteropHelper(window).EnsureHandle();
         _source = HwndSource.FromHwnd(_handle);
         _source.AddHook(Hook);
@@ -77,7 +79,7 @@ internal sealed class HotkeyRegistration : IDisposable
     public void Register(string text)
     {
         var hotkey = Hotkey.Parse(text);
-        int next = _id == 700 ? 701 : 700;
+        int next = _id == _firstId ? _firstId + 1 : _firstId;
         if (!Native.RegisterHotKey(_handle, next, hotkey.Modifiers | 0x4000u, hotkey.Key))
             throw new InvalidOperationException("このショートカットは使用中です。別の組み合わせを指定してください。");
         if (_registered) Native.UnregisterHotKey(_handle, _id);
