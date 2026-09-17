@@ -23,6 +23,9 @@ public partial class MainWindow : Window
     private AnswerWindow? _answer;
     private bool _loaded, _ready, _busy, _exiting, _exitAllowed, _panelDismissed, _syncingModels;
     private string _latest = "";
+    private ThinkingHistory _thoughts = new();
+    private readonly ThinkingView _recentThinking;
+    private string _latestError = "";
     private string? _preparedModel;
     private readonly Dictionary<string, OllamaCli> _sessionProviders = new(StringComparer.OrdinalIgnoreCase);
 
@@ -30,6 +33,8 @@ public partial class MainWindow : Window
     {
         _store = store; _settings = settings;
         InitializeComponent();
+        _recentThinking = new ThinkingView(CopyTextAsync); RecentThinkingHost.Children.Add(_recentThinking);
+        ThinkingCheck.IsChecked = settings.ShowThinking;
         PromptBox.Text = settings.Prompt; HotkeyBox.Text = settings.Hotkey;
         DeliveryBox.SelectedIndex = (int)settings.Delivery;
         ModelBox.Items.Add(settings.Model); ModelBox.SelectedItem = settings.Model;
@@ -158,7 +163,7 @@ public partial class MainWindow : Window
             throw new InvalidOperationException("画像の保存先は絶対パスで指定してください。");
         return _settings with { Prompt = PromptBox.Text, Model = model, Hotkey = HotkeyBox.Text.Trim(),
             Delivery = (Delivery)DeliveryBox.SelectedIndex, Glass = GlassCheck.IsChecked == true,
-            SaveImages = SaveImagesCheck.IsChecked == true, CopyImages = CopyImagesCheck.IsChecked == true,
+            SaveImages = SaveImagesCheck.IsChecked == true, CopyImages = CopyImagesCheck.IsChecked == true, ShowThinking = ThinkingCheck.IsChecked == true,
             ImageDirectory = imageDirectory, OllamaPath = OllamaPathBox.Text.Trim(), DisplaySeconds = seconds, TimeoutSeconds = timeout };
     }
     private void SaveSettings()
@@ -169,6 +174,7 @@ public partial class MainWindow : Window
         try { _store.Save(next); }
         catch { if (rebind) _hotkey!.Register(_settings.Hotkey); throw; }
         _settings = next;
+        if (!next.ShowThinking) { _thoughts = new(); _recentThinking.Clear(); _answer?.ClearThinking(); }
         SaveHint.Text = "保存済み  ·  × でトレイへ  ·  自動起動なし";
     }
     private void SaveClicked(object sender, RoutedEventArgs e)
@@ -249,6 +255,19 @@ public partial class MainWindow : Window
         if (!_ready || _provider == null) { ShowSettings(); Status("先にモデルを準備して開始してください。"); return; }
         var settings = _settings; var provider = _provider;
         SetBusy(true); _answer?.Close(); _answer = null; _panelDismissed = false;
+        _thoughts = new(); _latest = ""; _latestError = ""; RecentAnswer.Text = ""; RecentError.Text = ""; _recentThinking.Clear();
+        var thoughts = _thoughts;
+        bool generationComplete = false;
+        var thoughtTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+        thoughtTimer.Tick += (_, _) =>
+        {
+            if (!settings.ShowThinking || !_settings.ShowThinking || _exiting) return;
+            var snapshot = thoughts.Snapshot();
+            _recentThinking.Update(snapshot);
+            if (snapshot.Length > 0 && settings.Delivery != Delivery.Clipboard)
+                ShowAnswer(_latest.Length == 0 ? "思考中…" : _latest, false, settings);
+        };
+        if (settings.ShowThinking) thoughtTimer.Start();
         using var cts = new CancellationTokenSource(); _operation = cts;
         string? temp = null;
         try
@@ -286,14 +305,17 @@ public partial class MainWindow : Window
             Status("回答を生成中…");
             var progress = new Progress<string>(text =>
             {
-                if (cts.IsCancellationRequested || _exiting || _operation != cts || string.IsNullOrWhiteSpace(text)) return;
+                if (generationComplete || cts.IsCancellationRequested || _exiting || _operation != cts || string.IsNullOrWhiteSpace(text)) return;
+                _latest = text; RecentAnswer.Text = text;
                 if (settings.Delivery != Delivery.Clipboard) ShowAnswer(text, false, settings);
             });
             var generationStatus = new Progress<string>(text =>
             {
                 if (!cts.IsCancellationRequested && !_exiting && _operation == cts) Status(text);
             });
-            var answer = await provider.AnswerAsync(settings.Model, settings.Prompt, temp, progress, cts.Token, generationStatus);
+            var answer = await provider.AnswerAsync(settings.Model, settings.Prompt, temp, progress, cts.Token, generationStatus, settings.ShowThinking ? thoughts : null);
+            thoughtTimer.Stop();
+            generationComplete = true;
             cts.Token.ThrowIfCancellationRequested();
             _latest = answer; RecentAnswer.Text = answer;
             if (settings.Delivery != Delivery.Panel)
@@ -303,31 +325,41 @@ public partial class MainWindow : Window
             }
             if (settings.Delivery != Delivery.Clipboard) ShowAnswer(answer, true, settings);
             Status(sideEffectWarning ?? "待機中 · 回答を受け取りました。");
-            if (sideEffectWarning != null) ShowAnswer(sideEffectWarning, true, settings);
+            if (sideEffectWarning != null) { _latestError = sideEffectWarning; RecentError.Text = sideEffectWarning; }
         }
-        catch (OperationCanceledException) { _answer?.Close(); _answer = null; Status(_ready ? "待機中 · 生成を中断しました（キャンセル、または待機上限）。" : "停止中 · 処理をキャンセルしました。"); }
+        catch (OperationCanceledException)
+        {
+            thoughtTimer.Stop(); _latest = ""; RecentAnswer.Text = "";
+            _latestError = "生成を中断しました（キャンセル、または待機上限）。";
+            RecentError.Text = _latestError; Status(_latestError);
+            if (!_exiting) { _panelDismissed = false; ShowAnswer(_latestError, true, settings, true); }
+        }
         catch (Exception ex)
         {
-            _answer?.Close(); _answer = null; _panelDismissed = false; Status(ex.Message);
-            if (!_exiting) ShowAnswer(ex.Message, true, settings);
+            thoughtTimer.Stop(); _latest = ""; RecentAnswer.Text = "";
+            _latestError = ex.Message; RecentError.Text = ex.Message;
+            _panelDismissed = false; Status(ex.Message);
+            if (!_exiting) ShowAnswer(ex.Message, true, settings, true);
         }
         finally
         {
+            thoughtTimer.Stop();
+            if (settings.ShowThinking && _settings.ShowThinking) _recentThinking.Update(thoughts.Snapshot());
             _capture = null;
             if (temp != null) { try { File.Delete(temp); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status("一時画像を削除できませんでした。設定フォルダーのtempを確認してください。"); } }
             _operation = null; SetBusy(false);
         }
     }
-    private void ShowAnswer(string text, bool finished, Settings settings)
+    private void ShowAnswer(string text, bool finished, Settings settings, bool error = false)
     {
         if (_panelDismissed) return;
         if (_answer == null)
         {
             _answer = new AnswerWindow(settings, ShowRecent, CopyTextAsync);
             _answer.Closed += (_, _) => { _answer = null; _panelDismissed = true; };
-            _answer.Update(text, finished); _answer.Show();
+            _answer.Update(text, finished, error, settings.ShowThinking && _settings.ShowThinking ? _thoughts.Snapshot() : []); _answer.Show();
         }
-        else _answer.Update(text, finished);
+        else _answer.Update(text, finished, error, settings.ShowThinking && _settings.ShowThinking ? _thoughts.Snapshot() : []);
     }
     private static async Task SetClipboardAsync(Action action)
     {
@@ -351,7 +383,7 @@ public partial class MainWindow : Window
     }
     private async void CopyRecent(object sender, RoutedEventArgs e) => await CopyTextAsync(_latest);
     private void ShowRecentPanel(object sender, RoutedEventArgs e)
-    { if (!string.IsNullOrWhiteSpace(_latest)) { _panelDismissed = false; ShowAnswer(_latest, true, _settings); } }
+    { if (!string.IsNullOrWhiteSpace(_latest) || _latestError.Length > 0) { _panelDismissed = false; ShowAnswer(_latestError.Length > 0 ? _latestError : _latest, true, _settings, _latestError.Length > 0); } }
     private async void ExitClicked(object sender, RoutedEventArgs e) => await ExitAsync();
     private async void ReleaseExitClicked(object sender, RoutedEventArgs e) => await ExitAsync(true);
     private async Task ExitAsync(bool releaseModels = false)

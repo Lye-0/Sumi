@@ -32,6 +32,42 @@ void Check(bool condition, string description)
 async Task Reject(Func<Task> action, string description)
 { try { await action(); } catch (InvalidOperationException) { Check(true, description); return; } throw new Exception("FAIL: " + description); }
 
+Check(!new Settings().ShowThinking, "thinking display defaults off");
+Check(OllamaCli.ThinkingText("Thinking...\nreason\n...done thinking.\nD", true) == "reason", "CLI thinking separated from answer");
+Check(OllamaCli.ThinkingText("<think>reason</think>D", true) == "reason", "tagged thinking separated from answer");
+Check(OllamaCli.ThinkingText("<think>unfinished", true) == "unfinished", "unfinished thinking retained at EOF");
+Check(OllamaCli.ThinkingText("<think>reason</thi") == "reason", "partial closing marker hidden during streaming");
+Check(OllamaCli.ThinkingText("D") == "", "plain answer is never thinking");
+Exception? panelFailure = null;
+var panelThread = new Thread(() =>
+{
+    try
+    {
+        var type = typeof(Sumi.App).Assembly.GetType("Sumi.AnswerWindow")!;
+        var window = (System.Windows.Window)Activator.CreateInstance(type, new Settings { ShowThinking = true }, (Action)(() => { }), (Func<string, Task>)(_ => Task.CompletedTask))!;
+        var update = type.GetMethod("Update")!;
+        var data = new[] { new ThinkingUpdate(1, new string('x', 30000)), new ThinkingUpdate(2, "retry") };
+        update.Invoke(window, ["error", true, true, data]);
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var expander = (System.Windows.Controls.Expander)type.GetField("_thinking", flags)!.GetValue(window)!;
+        var timer = (System.Windows.Threading.DispatcherTimer)type.GetField("_timer", flags)!.GetValue(window)!;
+        var copy = (System.Windows.Controls.Button)type.GetField("_copy", flags)!.GetValue(window)!;
+        Check(expander.Visibility == System.Windows.Visibility.Visible && !timer.IsEnabled && !copy.IsEnabled, "error preserves accordion, disables final copy and auto-dismiss");
+        update.Invoke(window, ["D", false, false, data]);
+        expander.IsExpanded = true;
+        update.Invoke(window, ["D", true, false, data]);
+        Check(!expander.IsExpanded && copy.IsEnabled, "successful completion collapses thinking and enables final copy");
+        expander.IsExpanded = true;
+        Check(!timer.IsEnabled, "expanded thinking prevents auto-dismiss");
+        type.GetMethod("ClearThinking")!.Invoke(window, null);
+        Check(expander.Visibility == System.Windows.Visibility.Collapsed, "disabling thinking hides retained view");
+        window.Close();
+    }
+    catch (Exception ex) { panelFailure = ex; }
+});
+panelThread.SetApartmentState(ApartmentState.STA); panelThread.Start(); panelThread.Join();
+if (panelFailure != null) throw panelFailure;
+
 var releaseRunner = new FakeRunner();
 var releaseProvider = new OllamaCli("ollama.exe", releaseRunner);
 await releaseProvider.ReleaseUsedModelsAsync(default);
@@ -156,6 +192,18 @@ try
         new DirectProgress(_ => between.Cancel())); throw new Exception("FAIL cancel before retry"); }
     catch (OperationCanceledException) { Check(betweenRun.GenerationCount == 1, "cancellation between attempts prevents next CLI launch"); }
     var exe = Environment.ProcessPath!;
+    var thoughtRun = new FakeRunner();
+    thoughtRun.Responses.Enqueue(new(0, "Thinking...\nfirst thought", ""));
+    thoughtRun.Responses.Enqueue(new(0, "<think>retry thought", ""));
+    var history = new ThinkingHistory();
+    await Reject(() => new OllamaCli("ollama.exe", thoughtRun).AnswerAsync("gemma4:12b", "answer", file, null, default, thinking: history), "thinking-only still fails after retry");
+    Check(history.Snapshot().SequenceEqual(new[] { new ThinkingUpdate(1, "first thought"), new ThinkingUpdate(2, "retry thought") }), "both attempts survive final-answer failure");
+    var recoverThought = new FakeRunner();
+    recoverThought.Responses.Enqueue(new(0, "<think>one", ""));
+    recoverThought.Responses.Enqueue(new(0, "<think>two</think>D", ""));
+    var recoveredHistory = new ThinkingHistory();
+    var recoveredAnswer = await new OllamaCli("ollama.exe", recoverThought).AnswerAsync("gemma4:12b", "answer", file, null, default, thinking: recoveredHistory);
+    Check(recoveredAnswer == "D" && recoveredHistory.Snapshot().Length == 2, "copyable final answer excludes all thoughts");
     var runner = new ProcessRunner();
     var echo = await runner.RunAsync(exe, ["--child"], injection, null, default);
     Check(echo.Output == injection && echo.Error == "stderr is separate", "real redirected process UTF8 / stdout-stderr separation");

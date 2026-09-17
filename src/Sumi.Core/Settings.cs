@@ -16,6 +16,7 @@ public sealed record Settings
     public bool Glass { get; init; } = true;
     public bool SaveImages { get; init; }
     public bool CopyImages { get; init; }
+    public bool ShowThinking { get; init; }
     public string ImageDirectory { get; init; } = "";
     public int DisplaySeconds { get; init; } = 12;
     public int TimeoutSeconds { get; init; } = 300;

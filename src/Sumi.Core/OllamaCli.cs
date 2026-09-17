@@ -8,7 +8,7 @@ public interface IModelProvider
 {
     Task<IReadOnlyList<string>> ListModelsAsync(CancellationToken token);
     Task PrepareAsync(string model, CancellationToken token);
-    Task<string> AnswerAsync(string model, string prompt, string imagePath, IProgress<string>? progress, CancellationToken token, IProgress<string>? status = null);
+    Task<string> AnswerAsync(string model, string prompt, string imagePath, IProgress<string>? progress, CancellationToken token, IProgress<string>? status = null, IProgress<ThinkingUpdate>? thinking = null);
     string Preview(string model);
 }
 
@@ -163,20 +163,28 @@ public sealed partial class OllamaCli(string executable, ICommandRunner? runner 
         _usedModels.Add(model); // A cancelled load may still leave a model resident.
         await RunAsync(["run", model], "", null, token);
     }
-    public async Task<string> AnswerAsync(string model, string prompt, string imagePath, IProgress<string>? progress, CancellationToken token, IProgress<string>? status = null)
+    public async Task<string> AnswerAsync(string model, string prompt, string imagePath, IProgress<string>? progress, CancellationToken token, IProgress<string>? status = null, IProgress<ThinkingUpdate>? thinking = null)
     {
         if (!File.Exists(imagePath)) throw new FileNotFoundException("撮影画像が見つかりません。", imagePath);
         // Pass text as stdin, never shell code or additional command-line arguments.
         var input = $"{Path.GetFullPath(imagePath)}\n{prompt}";
-        var adapter = progress == null ? null : new InlineProgress(s => progress.Report(AnswerText(s)));
         for (int attempt = 0; attempt < 2; attempt++)
         {
+            var attemptNumber = attempt + 1;
+            var lastPaint = Environment.TickCount64 - 150;
+            var adapter = new InlineProgress(s =>
+            {
+                thinking?.Report(new(attemptNumber, ThinkingText(s)));
+                if (Environment.TickCount64 - lastPaint >= 150)
+                { lastPaint = Environment.TickCount64; progress?.Report(AnswerText(s)); }
+            });
             // The caller's cancellation/deadline covers both attempts. Never reset it.
             token.ThrowIfCancellationRequested();
             await ValidateAsync(model, token);
             token.ThrowIfCancellationRequested();
             _usedModels.Add(model);
             var result = await RunAsync(["run", model], input, adapter, token);
+            thinking?.Report(new(attemptNumber, ThinkingText(result.Output, true)));
             token.ThrowIfCancellationRequested();
             var answer = FinalAnswerText(result.Output).Trim();
             if (answer.Length > 0) return answer;
@@ -208,6 +216,21 @@ public sealed partial class OllamaCli(string executable, ICommandRunner? runner 
         return result;
     }
     public static string Clean(string text) => Ansi().Replace(text, "").Replace("\r", "");
+    public static string ThinkingText(string raw, bool final = false)
+    {
+        var text = Clean(raw).TrimStart();
+        string opening, closing;
+        if (text.StartsWith("Thinking...", StringComparison.Ordinal)) { opening = "Thinking..."; closing = "...done thinking."; }
+        else if (text.StartsWith("<think>", StringComparison.Ordinal)) { opening = "<think>"; closing = "</think>"; }
+        else return "";
+        text = text[opening.Length..];
+        var end = text.IndexOf(closing, StringComparison.Ordinal);
+        if (end >= 0) return text[..end].Trim();
+        if (!final)
+            for (int n = Math.Min(closing.Length - 1, text.Length); n > 0; n--)
+                if (text.EndsWith(closing[..n], StringComparison.Ordinal)) return text[..^n].Trim();
+        return text.Trim();
+    }
     public static string AnswerText(string raw) => ParseAnswer(raw, final: false);
     public static string FinalAnswerText(string raw) => ParseAnswer(raw, final: true);
     private static string ParseAnswer(string raw, bool final)

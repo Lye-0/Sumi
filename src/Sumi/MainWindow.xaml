@@ -42,6 +42,8 @@
      <StackPanel Background="{DynamicResource SurfaceBrush}" Margin="0,0,0,8">
       <StackPanel Margin="16">
        <CheckBox x:Name="GlassCheck" Content="透明感のある表示" Checked="GlassChanged" Unchecked="GlassChanged"/>
+       <CheckBox x:Name="ThinkingCheck" Content="モデルの思考内容も表示" Checked="EditedCheck" Unchecked="EditedCheck"/>
+       <TextBlock Text="モデルが出力した思考を表示します。モデルの思考設定は変更しません。" Style="{StaticResource Muted}" Margin="0,0,0,8"/>
        <Grid Margin="0,10,0,10"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
         <StackPanel><TextBlock Text="パネルの表示秒数（3–120）" Style="{StaticResource Muted}" Margin="0,0,0,6"/><local:DigitsBox x:Name="SecondsBox" Style="{StaticResource CompactTextBox}" Text="12" MaxLength="3" AutomationProperties.Name="パネルの表示秒数" TextChanged="Edited"/></StackPanel>
         <StackPanel Grid.Column="2"><TextBlock Text="回答の待機上限・秒（30–1800）" Style="{StaticResource Muted}" Margin="0,0,0,6"/><local:DigitsBox x:Name="TimeoutBox" Style="{StaticResource CompactTextBox}" Text="300" MaxLength="4" AutomationProperties.Name="回答の待機上限" TextChanged="Edited"/></StackPanel>
@@ -64,7 +66,7 @@
      </StackPanel>
     </Expander>
     <Expander x:Name="RecentExpander" Header="直近の回答">
-     <StackPanel><TextBox x:Name="RecentAnswer" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" MaxHeight="320" MinHeight="60" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="直近の回答"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0"><Button Content="小型パネルで表示" Click="ShowRecentPanel" Margin="0,0,8,0"/><Button Content="回答をコピー" Click="CopyRecent"/></StackPanel></StackPanel>
+     <StackPanel><TextBlock x:Name="RecentError" TextWrapping="Wrap" Margin="0,0,0,8"/><TextBox x:Name="RecentAnswer" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" MaxHeight="320" MinHeight="60" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="直近の回答"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0"><Button Content="小型パネルで表示" Click="ShowRecentPanel" Margin="0,0,8,0"/><Button Content="回答をコピー" Click="CopyRecent"/></StackPanel><StackPanel x:Name="RecentThinkingHost"/></StackPanel>
     </Expander>
    </StackPanel>
   </ScrollViewer>

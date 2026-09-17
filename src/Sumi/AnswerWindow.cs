@@ -13,6 +13,9 @@ internal sealed class AnswerWindow : Window
     private readonly TextBlock _caption;
     private readonly DispatcherTimer _timer = new();
     private readonly Button _copy;
+    private readonly ThinkingView _thinking;
+    private readonly ScrollViewer _scroll;
+    private bool _error;
     private string _answer = "";
     public AnswerWindow(Settings settings, Action showFull, Func<string, Task> copy)
     {
@@ -25,11 +28,16 @@ internal sealed class AnswerWindow : Window
         _caption = new TextBlock { Text = "Sumi  /  回答", FontSize = 12, Margin = new Thickness(0, 0, 0, 14) };
         _caption.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush"); stack.Children.Add(_caption);
         _body = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 15, LineHeight = 25 };
-        stack.Children.Add(new ScrollViewer { Content = _body, MaxHeight = 270, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        var content = new StackPanel(); content.Children.Add(_body);
+        _thinking = new ThinkingView(copy); content.Children.Add(_thinking);
+        _scroll = new ScrollViewer { Content = content, MaxHeight = 350, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        stack.Children.Add(_scroll);
+        _thinking.Expanded += (_, _) => _timer.Stop();
+        _thinking.Collapsed += (_, _) => RestartTimer();
         var controls = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 16, 0, 0) };
         _copy = new Button { Content = "コピー", Padding = new Thickness(12, 7, 12, 7) };
         _copy.Click += async (_, _) => await copy(_answer);
-        var full = new Button { Content = "全文", Margin = new Thickness(8, 0, 8, 0), Padding = new Thickness(12, 7, 12, 7) };
+        var full = new Button { Content = "直近の回答", Margin = new Thickness(8, 0, 8, 0), Padding = new Thickness(12, 7, 12, 7) };
         full.Click += (_, _) => { showFull(); Close(); };
         var close = new Button { Content = "閉じる", Padding = new Thickness(12, 7, 12, 7) }; close.Click += (_, _) => Close();
         controls.Children.Add(_copy); controls.Children.Add(full); controls.Children.Add(close); stack.Children.Add(controls);
@@ -39,7 +47,9 @@ internal sealed class AnswerWindow : Window
         _timer.Interval = TimeSpan.FromSeconds(Math.Clamp(settings.DisplaySeconds, 3, 120));
         _timer.Tick += (_, _) => Close();
         MouseEnter += (_, _) => _timer.Stop();
-        MouseLeave += (_, _) => { if (_finished) _timer.Start(); };
+        MouseLeave += (_, _) => RestartTimer();
+        GotKeyboardFocus += (_, _) => _timer.Stop();
+        LostKeyboardFocus += (_, _) => RestartTimer();
         Closed += (_, _) => _timer.Stop();
         SourceInitialized += (_, _) =>
         {
@@ -55,11 +65,25 @@ internal sealed class AnswerWindow : Window
         SizeChanged += (_, _) => { if (IsLoaded) Position(); };
     }
     private bool _finished;
-    public void Update(string text, bool finished)
+    private void RestartTimer()
     {
-        _answer = text; _body.Text = text; _finished = finished; _copy.IsEnabled = finished;
-        _caption.Text = finished ? "Sumi  /  回答" : "Sumi  /  回答を受信中";
-        if (finished) _timer.Start();
+        _timer.Stop();
+        if (_finished && !_error && !_thinking.IsExpanded && !IsMouseOver && !IsKeyboardFocusWithin) _timer.Start();
+    }
+    public void ClearThinking() => _thinking.Clear();
+    public void Update(string text, bool finished, bool error = false, ThinkingUpdate[]? thoughts = null)
+    {
+        bool completing = finished && !_finished;
+        bool follow = _scroll.VerticalOffset >= _scroll.ScrollableHeight - 2;
+        var offset = _scroll.VerticalOffset;
+        _answer = error ? "" : text;
+        if (_body.Text != text) _body.Text = text;
+        _finished = finished; _error = error; _copy.IsEnabled = finished && !error && text.Length > 0;
+        _thinking.Update(thoughts ?? []);
+        if (completing && !error) _thinking.IsExpanded = false;
+        _caption.Text = error ? "Sumi  /  回答を取得できませんでした" : finished ? "Sumi  /  回答" : "Sumi  /  生成中";
+        if (follow && !_thinking.IsExpanded) _scroll.ScrollToEnd(); else _scroll.ScrollToVerticalOffset(offset);
+        if (finished) RestartTimer(); else _timer.Stop();
     }
     private void Position()
     {
@@ -71,6 +95,7 @@ internal sealed class AnswerWindow : Window
         // Move to the target monitor first so Windows supplies its actual DPI.
         if (!_positioned) { Native.SetWindowPos(h, new nint(-1), work.Right - 400, work.Top + 32, 0, 0, 0x0011); _positioned = true; }
         double scale = Native.GetDpiForWindow(h) / 96d;
+        _scroll.MaxHeight = Math.Max(80, Math.Min(350, work.Height / scale - 160));
         int w = (int)Math.Ceiling(ActualWidth * scale), height = (int)Math.Ceiling(ActualHeight * scale);
         Native.SetWindowPos(h, new nint(-1), work.Right - w - 24, work.Bottom - height - 24, w, height, 0x0010);
     }
