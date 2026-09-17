@@ -70,6 +70,23 @@ var panelThread = new Thread(() =>
         type.GetMethod("ClearThinking")!.Invoke(window, null);
         Check(expander.Visibility == System.Windows.Visibility.Collapsed, "disabling thinking hides retained view");
         window.Close();
+        var minimal = (System.Windows.Window)Activator.CreateInstance(type, new Settings { Delivery = Delivery.Minimal, ShowThinking = true }, (Action)(() => { }), (Func<string, Task>)(_ => Task.CompletedTask))!;
+        update.Invoke(minimal, ["D", true, false, data]);
+        var root = (System.Windows.Controls.StackPanel)((System.Windows.Controls.Border)minimal.Content).Child;
+        var thinking = (System.Windows.Controls.Expander)type.GetField("_thinking", flags)!.GetValue(minimal)!;
+        Check(minimal.Width < window.Width && root.Children.Count == 1, "minimal notification contains only answer/thinking scroll area");
+        Check(!((System.Windows.Controls.StackPanel)thinking.Content).Children.OfType<System.Windows.Controls.Button>().Any(), "minimal thinking has no copy buttons");
+        double MeasureAnswer(string text)
+        {
+            var sample = (System.Windows.Window)Activator.CreateInstance(type, new Settings { Delivery = Delivery.Minimal }, (Action)(() => { }), (Func<string, Task>)(_ => Task.CompletedTask))!;
+            update.Invoke(sample, [text, true, false, Array.Empty<ThinkingUpdate>()]);
+            var scroll = (System.Windows.Controls.ScrollViewer)type.GetField("_answerScroll", flags)!.GetValue(sample)!;
+            scroll.Measure(new System.Windows.Size(220, double.PositiveInfinity));
+            var height = scroll.DesiredSize.Height; sample.Close(); return height;
+        }
+        var oneLine = MeasureAnswer("one"); var twoLines = MeasureAnswer("one\ntwo"); var threeLines = MeasureAnswer("one\ntwo\nthree");
+        Check(oneLine <= 18 && twoLines > oneLine && twoLines <= 34 && threeLines == twoLines, "minimal answer grows from one to two lines then caps height");
+        minimal.Close();
     }
     catch (Exception ex) { panelFailure = ex; }
 });
@@ -208,6 +225,7 @@ try
     Check(history.Snapshot().SequenceEqual(new[] { new ThinkingUpdate(1, "first thought"), new ThinkingUpdate(2, "retry thought") }), "both attempts survive final-answer failure");
     Check(history.ClipboardFallback(Delivery.Clipboard) == "retry thought" && history.ClipboardFallback(Delivery.Both) == "retry thought", "clipboard fallback uses latest nonempty thinking for both clipboard modes");
     Check(history.ClipboardFallback(Delivery.Panel) == "" && new ThinkingHistory().ClipboardFallback(Delivery.Clipboard) == "", "no clipboard fallback for panel-only or missing thoughts");
+    Check(history.ClipboardFallback(Delivery.Minimal) == "", "minimal notification does not copy to clipboard");
     var recoverThought = new FakeRunner();
     recoverThought.Responses.Enqueue(new(0, "<think>one", ""));
     recoverThought.Responses.Enqueue(new(0, "<think>two</think>D", ""));

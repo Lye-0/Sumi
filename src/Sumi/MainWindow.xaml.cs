@@ -314,12 +314,12 @@ public partial class MainWindow : Window
                 if (!cts.IsCancellationRequested && !_exiting && _operation == cts) Status(text);
             });
             var answer = await provider.AnswerAsync(settings.Model, settings.Prompt, temp, progress, cts.Token, generationStatus,
-                settings.ShowThinking || settings.Delivery != Delivery.Panel ? thoughts : null);
+                settings.ShowThinking || settings.Delivery is (Delivery.Clipboard or Delivery.Both) ? thoughts : null);
             thoughtTimer.Stop();
             generationComplete = true;
             cts.Token.ThrowIfCancellationRequested();
             _latest = answer; RecentAnswer.Text = answer;
-            if (settings.Delivery != Delivery.Panel)
+            if (settings.Delivery is Delivery.Clipboard or Delivery.Both)
             {
                 try { await SetClipboardAsync(() => System.Windows.Clipboard.SetText(answer)); }
                 catch (System.Runtime.InteropServices.COMException) { sideEffectWarning = "回答をコピーできませんでした。直近の回答から再試行できます。"; }

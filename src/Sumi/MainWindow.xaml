@@ -32,7 +32,7 @@
      </StackPanel>
      <StackPanel Grid.Column="2">
       <TextBlock Text="回答の受け取り方" FontWeight="SemiBold" Margin="0,6,0,15"/>
-      <ComboBox x:Name="DeliveryBox" SelectedIndex="0" AutomationProperties.Name="回答の受け取り方" SelectionChanged="EditedSelection"><ComboBoxItem Content="小型パネル"/><ComboBoxItem Content="クリップボード"/><ComboBoxItem Content="小型パネル ＋ クリップボード"/></ComboBox>
+      <ComboBox x:Name="DeliveryBox" SelectedIndex="0" AutomationProperties.Name="回答の受け取り方" SelectionChanged="EditedSelection"><ComboBoxItem Content="小型パネル"/><ComboBoxItem Content="クリップボード"/><ComboBoxItem Content="小型パネル ＋ クリップボード"/><ComboBoxItem Content="最小の通知"/></ComboBox>
       <TextBlock Text="撮影ショートカット" Style="{StaticResource Muted}" Margin="0,13,0,6"/>
       <local:ShortcutBox x:Name="HotkeyBox" Text="Ctrl+Alt+S" Style="{StaticResource CompactTextBox}" AutomationProperties.Name="撮影ショートカットを記録" TextChanged="Edited" GotKeyboardFocus="ShortcutFocusEntered" LostKeyboardFocus="ShortcutFocusLeft"/>
       <TextBlock x:Name="ShortcutHint" Text="クリックしてキーの組み合わせを入力" Style="{StaticResource Muted}" Margin="0,6,0,0"/>

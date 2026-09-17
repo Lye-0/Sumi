@@ -10,13 +10,24 @@ internal sealed class ThinkingView : Expander
     private readonly StackPanel _items = new();
     private readonly Dictionary<int, TextBox> _texts = new();
     private readonly Func<string, Task> _copy;
-    public ThinkingView(Func<string, Task> copy)
+    private readonly bool _minimal;
+    public ThinkingView(Func<string, Task> copy, bool minimal = false)
     {
+        _minimal = minimal;
         _copy = copy; Header = "思考内容"; Content = _items;
         // Implicit styles use the exact runtime type: this subclass must opt in
         // to the application's Expander template instead of the OS default.
         SetResourceReference(StyleProperty, typeof(Expander));
         SetResourceReference(ForegroundProperty, "TextBrush");
+        if (minimal)
+        {
+            FontSize = 11; Opacity = 0.5;
+            SetResourceReference(StyleProperty, "MinimalThinking");
+            MouseEnter += (_, _) => Opacity = 0.85;
+            MouseLeave += (_, _) => Opacity = IsExpanded ? 0.85 : 0.5;
+            Expanded += (_, _) => Opacity = 0.85;
+            Collapsed += (_, _) => Opacity = IsMouseOver ? 0.85 : 0.5;
+        }
         Visibility = Visibility.Collapsed;
     }
     public void Update(ThinkingUpdate[] attempts)
@@ -30,6 +41,7 @@ internal sealed class ThinkingView : Expander
                 box = new TextBox { IsReadOnly = true, TextWrapping = TextWrapping.Wrap,
                     MaxHeight = 240, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
                 AutomationProperties.SetName(box, $"思考内容 · {label}");
+                if (_minimal) { box.MaxHeight = 140; box.FontSize = 11; box.Padding = new Thickness(0); box.BorderThickness = new Thickness(0); box.Background = System.Windows.Media.Brushes.Transparent; }
                 _texts.Add(attempt.Attempt, box);
                 var heading = new TextBlock { Text = label, Margin = new Thickness(0, 6, 0, 6) };
                 heading.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
@@ -39,7 +51,7 @@ internal sealed class ThinkingView : Expander
                 var button = new Button { Content = "思考内容をコピー", HorizontalAlignment = HorizontalAlignment.Right,
                     Margin = new Thickness(0, 6, 0, 8), Padding = new Thickness(10, 6, 10, 6) };
                 button.Click += async (_, _) => await _copy(captured.Text);
-                _items.Children.Add(button);
+                if (!_minimal) _items.Children.Add(button);
             }
             if (box.Text == attempt.Text) continue;
             bool follow = box.VerticalOffset >= box.ExtentHeight - box.ViewportHeight - 2;
