@@ -82,7 +82,7 @@ public partial class MainWindow : Window
             else if (e.Button == Forms.MouseButtons.Right)
             {
                 _trayMenu.Update(GetTrayState());
-                _trayMenu.IsOpen = true;
+                _trayMenu.ShowFromTray();
             }
         };
     }

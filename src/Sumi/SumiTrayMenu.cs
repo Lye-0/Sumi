@@ -13,6 +13,17 @@ internal sealed class SumiTrayMenu : ContextMenu
     private readonly TextBlock _detail = new() { FontSize = 12, Margin = new Thickness(0, 4, 0, 0), TextWrapping = TextWrapping.Wrap, MaxWidth = 300 };
     private readonly MenuItem _send, _stock, _recent, _clear, _toggle, _open, _exit, _release;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(250) };
+    private nint _launcher, _foreground;
+    private bool _openedFromTray;
+    public void ShowFromTray()
+    {
+        if (IsOpen) { IsOpen = false; return; }
+        Native.GetCursorPos(out var point);
+        _launcher = Native.GetAncestor(Native.WindowFromPoint(point), 2); // GA_ROOT
+        _foreground = Native.GetForegroundWindow();
+        _openedFromTray = true;
+        IsOpen = true;
+    }
     public SumiTrayMenu(Func<TrayMenuState> state, Action open, Func<Task> send, Func<Task> stock,
         Action recent, Action clear, Func<Task> toggle, Func<bool, Task> exit, Action<string> error)
     {
@@ -34,12 +45,22 @@ internal sealed class SumiTrayMenu : ContextMenu
         _exit = Add("終了", () => exit(false)); _release = Add("モデルを解放して終了", () => exit(true));
         _exit.SetResourceReference(ForegroundProperty, "TrayDangerBrush");
         _release.SetResourceReference(ForegroundProperty, "TrayDangerBrush");
-        _timer.Tick += (_, _) => Update(state());
+        _timer.Tick += (_, _) =>
+        {
+            var foreground = Native.GetForegroundWindow();
+            var popup = (PresentationSource.FromVisual(this) as HwndSource)?.Handle ?? 0;
+            bool launcherClosed = _openedFromTray && _launcher != 0 && !Native.IsWindowVisible(_launcher);
+            bool focusMoved = foreground != 0 && foreground != _foreground && foreground != popup;
+            if (launcherClosed || focusMoved) { IsOpen = false; return; }
+            if (foreground != 0) _foreground = foreground;
+            Update(state());
+        };
         Opened += (_, _) =>
         {
+            if (!_openedFromTray) _foreground = Native.GetForegroundWindow();
             Update(state()); _timer.Start();
         };
-        Closed += (_, _) => _timer.Stop();
+        Closed += (_, _) => { _timer.Stop(); _launcher = 0; _foreground = 0; _openedFromTray = false; };
         Update(state());
 
         MenuItem Add(string title, Func<Task> action)

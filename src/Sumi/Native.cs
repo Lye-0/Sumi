@@ -11,6 +11,10 @@ internal static class Native
     [DllImport("user32.dll", SetLastError = true)] internal static extern bool RegisterHotKey(nint h, int id, uint mods, uint key);
     [DllImport("user32.dll")] internal static extern bool UnregisterHotKey(nint h, int id);
     [DllImport("user32.dll")] internal static extern bool GetCursorPos(out PointI p);
+    [DllImport("user32.dll")] internal static extern nint GetForegroundWindow();
+    [DllImport("user32.dll")] internal static extern nint WindowFromPoint(PointI point);
+    [DllImport("user32.dll")] internal static extern nint GetAncestor(nint h, uint flags);
+    [DllImport("user32.dll")] internal static extern bool IsWindowVisible(nint h);
     [DllImport("user32.dll")] private static extern uint GetMessagePos();
     internal static PointI MouseMessagePosition()
     { var packed = GetMessagePos(); return new PointI { X = unchecked((short)(packed & 0xffff)), Y = unchecked((short)(packed >> 16)) }; }
