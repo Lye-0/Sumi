@@ -1,5 +1,7 @@
 <Application x:Class="Sumi.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" ShutdownMode="OnExplicitShutdown">
  <Application.Resources>
+ <ResourceDictionary>
+  <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="TrayStyles.xaml"/></ResourceDictionary.MergedDictionaries>
   <SolidColorBrush x:Key="WindowBrush" Color="#FF192129"/>
   <SolidColorBrush x:Key="CanvasBrush" Color="#F01B2128"/>
   <SolidColorBrush x:Key="SurfaceBrush" Color="#A0252E38"/>
@@ -42,5 +44,6 @@
    <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
   </Style>
   <Style x:Key="MinimalThinking" TargetType="Expander"><Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Expander"><StackPanel><ToggleButton IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" HorizontalContentAlignment="Left" AutomationProperties.Name="思考内容"><ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="Transparent" Padding="0,3"><StackPanel Orientation="Horizontal"><TextBlock x:Name="Arrow" Text="＋" Margin="0,0,4,0"/><TextBlock Text="思考"/></StackPanel></Border><ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Arrow" Property="Text" Value="−"/></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template></ToggleButton><ContentPresenter x:Name="Body" Visibility="Collapsed"/></StackPanel><ControlTemplate.Triggers><Trigger Property="IsExpanded" Value="True"><Setter TargetName="Body" Property="Visibility" Value="Visible"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
+ </ResourceDictionary>
  </Application.Resources>
 </Application>

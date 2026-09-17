@@ -54,6 +54,7 @@ internal static class Appearance
         Set("MutedBrush", dark ? "#ABBDCA" : "#596D79");
         Set("AccentBrush", dark ? "#B2E3D6" : "#235F53");
         Set("AccentTextBrush", dark ? "#102E28" : "#FFFFFF");
+        Set("TrayDangerBrush", dark ? "#F3A4AE" : "#A52C3D");
         foreach (Window w in System.Windows.Application.Current.Windows)
             if (w is MainWindow or AnswerWindow or InformationWindow) Native.ConfigureFrame(w, theme);
     }

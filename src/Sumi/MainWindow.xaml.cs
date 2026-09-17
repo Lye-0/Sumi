@@ -19,6 +19,8 @@ public partial class MainWindow : Window
     private HotkeyRegistration? _stockHotkey;
     private readonly ImageStock _stock = new();
     private Forms.NotifyIcon? _tray;
+    private SumiTrayMenu? _trayMenu;
+    private bool _preparing;
     private CancellationTokenSource? _operation;
     private CancellationTokenSource? _refresh;
     private CaptureSession? _capture;
@@ -71,17 +73,31 @@ public partial class MainWindow : Window
     private void SetupTray()
     {
         _tray = new Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Text = "Sumi · 準備前", Visible = true };
-        var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add("Sumiを開く", null, (_, _) => ShowSettings());
-        menu.Items.Add("撮影", null, async (_, _) => await CaptureAsync());
-        menu.Items.Add("撮影してストック", null, async (_, _) => await CaptureStockAsync());
-        menu.Items.Add("ストックを破棄", null, (_, _) => ClearStock());
-        menu.Items.Add("直近の回答", null, (_, _) => ShowRecent());
-        menu.Items.Add("一時停止", null, (_, _) => Pause());
-        menu.Items.Add("終了", null, async (_, _) => await ExitAsync());
-        menu.Items.Add("モデルを解放して終了", null, async (_, _) => await ExitAsync(true));
-        _tray.ContextMenuStrip = menu;
-        _tray.DoubleClick += (_, _) => ShowSettings();
+        _trayMenu = new SumiTrayMenu(GetTrayState, ShowSettings, CaptureAsync, CaptureStockAsync,
+            ShowRecent, ClearStock, ToggleTrayAsync, ExitAsync, message => { ShowSettings(); Status(message); });
+        _tray.MouseUp += (_, e) =>
+        {
+            if (_exiting) return;
+            if (e.Button == Forms.MouseButtons.Left) { _trayMenu.IsOpen = false; ShowSettings(); }
+            else if (e.Button == Forms.MouseButtons.Right)
+            {
+                _trayMenu.Update(GetTrayState());
+                _trayMenu.IsOpen = true;
+            }
+        };
+    }
+    private TrayMenuState GetTrayState() => new()
+    {
+        Ready = _ready, Busy = _busy, Preparing = _preparing, Capturing = _capture != null,
+        Refreshing = _refresh != null, Exiting = _exiting, PreparedBefore = _preparedModel != null,
+        HasAnswer = _latest.Length > 0 || _latestError.Length > 0 || _thoughts.Snapshot().Length > 0,
+        StockCount = _stock.Count, Model = _preparedModel ?? _settings.Model,
+        SendKey = _settings.Hotkey, StockKey = _settings.StockHotkey
+    };
+    private async Task ToggleTrayAsync()
+    {
+        if (_exiting || _refresh != null) return;
+        if (_busy || _ready) Pause(); else await StartAsync();
     }
     private void Status(string text)
     {
@@ -232,11 +248,12 @@ public partial class MainWindow : Window
         PauseButton.Content = _busy ? "キャンセル" : "一時停止";
         if (_tray != null) _tray.Text = (_busy ? "Sumi · 処理中" : _ready ? "Sumi · 待機中" : "Sumi · 停止中") + $" · ストック{_stock.Count}枚";
     }
-    private async void StartClicked(object sender, RoutedEventArgs e)
+    private async void StartClicked(object sender, RoutedEventArgs e) => await StartAsync();
+    private async Task StartAsync()
     {
         if (_busy || _ready || _refresh != null || _exiting) return;
         try { SaveSettings(); } catch (Exception ex) { Status(ex.Message); return; }
-        _hotkey?.Pause(); _stockHotkey?.Pause(); _ready = false; SetBusy(true);
+        _hotkey?.Pause(); _stockHotkey?.Pause(); _ready = false; _preparing = true; SetBusy(true);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(_settings.TimeoutSeconds)); _operation = cts;
         Status("モデルを準備中… 終わるとショートカットが有効になります。");
         try
@@ -253,7 +270,7 @@ public partial class MainWindow : Window
         }
         catch (OperationCanceledException) { Status("準備を中断しました（キャンセル、または待機上限）。"); }
         catch (Exception ex) { Status(ex.Message); }
-        finally { _operation = null; SetBusy(false); }
+        finally { _preparing = false; _operation = null; SetBusy(false); }
     }
     private void PauseClicked(object sender, RoutedEventArgs e) => Pause();
     private void Pause()
@@ -284,6 +301,7 @@ public partial class MainWindow : Window
         if (_exiting || _busy) return;
         if (!_ready) { ShowSettings(); Status("先にモデルを準備して開始してください。"); return; }
         if (_stock.Count >= ImageStock.MaxImages) { Status("ストックは20枚までです。送信するか破棄してください。"); return; }
+        if (_trayMenu != null) _trayMenu.IsOpen = false;
         SetBusy(true); _answer?.Close();
         using var cts = new CancellationTokenSource(); _operation = cts;
         try
@@ -306,6 +324,7 @@ public partial class MainWindow : Window
         if (_busy) { Status("処理中です。次の撮影は完了後に行えます。"); return; }
         if (!_ready || _provider == null) { ShowSettings(); Status("先にモデルを準備して開始してください。"); return; }
         var settings = _settings; var provider = _provider;
+        if (_trayMenu != null) _trayMenu.IsOpen = false;
         SetBusy(true); _answer?.Close(); _answer = null; _panelDismissed = false;
         _thoughts = new(); _latest = ""; _latestError = ""; RecentAnswer.Text = ""; RecentError.Text = ""; _recentThinking.Clear();
         var thoughts = _thoughts;
@@ -465,7 +484,7 @@ public partial class MainWindow : Window
     private async Task ExitAsync(bool releaseModels = false)
     {
         if (_exiting) return;
-        _exiting = true; _ready = false; _hotkey?.Pause(); _stockHotkey?.Pause(); _operation?.Cancel(); _refresh?.Cancel(); _capture?.Cancel();
+        _exiting = true; if (_trayMenu != null) _trayMenu.IsOpen = false; _ready = false; _hotkey?.Pause(); _stockHotkey?.Pause(); _operation?.Cancel(); _refresh?.Cancel(); _capture?.Cancel();
         UpdateControls();
         // Await the process runner's finally, so no child CLI or temporary capture survives a normal exit.
         while (_operation != null || _refresh != null) await Task.Delay(40);

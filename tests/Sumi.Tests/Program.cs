@@ -33,6 +33,16 @@ async Task Reject(Func<Task> action, string description)
 { try { await action(); } catch (InvalidOperationException) { Check(true, description); return; } throw new Exception("FAIL: " + description); }
 
 Check(!new Settings().ShowThinking, "thinking display defaults off");
+var trayState = new TrayMenuState();
+Check(trayState.Phase == "準備前" && !trayState.CanCapture && !trayState.CanClear && trayState.CanToggle, "tray initial state disables unavailable capture and clear");
+trayState = trayState with { Ready = true, PreparedBefore = true, StockCount = 2 };
+Check(trayState.Phase == "待機中" && trayState.ToggleLabel == "一時停止" && trayState.CanCapture && trayState.CanClear, "tray ready actions");
+Check((trayState with { Ready = false }).ToggleLabel == "再開", "tray paused state offers resume");
+Check((trayState with { Busy = true }).ToggleLabel == "生成をキャンセル" && !(trayState with { Busy = true }).CanClear, "tray generation offers cancel and protects stock");
+Check((trayState with { Busy = true, Capturing = true }).Phase == "撮影中", "tray distinguishes capture");
+Check((trayState with { Busy = true, Preparing = true }).ToggleLabel == "準備をキャンセル", "tray distinguishes preparation");
+Check(!(trayState with { StockCount = ImageStock.MaxImages }).CanStock, "tray disables stock at limit");
+Check(!(trayState with { Exiting = true }).CanCapture && !(trayState with { Exiting = true }).CanToggle, "tray disables operations during exit");
 var stock = new ImageStock();
 stock.Add([1]); stock.Add([2, 3]);
 Check(stock.Count == 2 && stock.Bytes == 3 && stock.Snapshot()[1].SequenceEqual(new byte[] { 2, 3 }), "stock preserves capture order and byte count");
