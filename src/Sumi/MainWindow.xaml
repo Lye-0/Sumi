@@ -34,8 +34,10 @@
       <TextBlock Text="回答の受け取り方" FontWeight="SemiBold" Margin="0,6,0,15"/>
       <ComboBox x:Name="DeliveryBox" SelectedValuePath="Tag" AutomationProperties.Name="回答の受け取り方" SelectionChanged="EditedSelection"><ComboBoxItem Content="小型パネル" Tag="{x:Static core:Delivery.Panel}"/><ComboBoxItem Content="最小の通知" Tag="{x:Static core:Delivery.Minimal}"/><ComboBoxItem Content="クリップボード" Tag="{x:Static core:Delivery.Clipboard}"/><ComboBoxItem Content="小型パネル ＋ クリップボード" Tag="{x:Static core:Delivery.Both}"/><ComboBoxItem Content="最小の通知 ＋ クリップボード" Tag="{x:Static core:Delivery.MinimalBoth}"/></ComboBox>
       <TextBlock Text="ショートカット" FontWeight="SemiBold" Margin="0,16,0,10"/>
+      <Border BorderBrush="{DynamicResource LineBrush}" BorderThickness="1,0,0,0" Padding="10,0,0,0" Margin="2,0,0,0">
+       <StackPanel>
       <Grid>
-       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="174"/></Grid.ColumnDefinitions>
+       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="164"/></Grid.ColumnDefinitions>
        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
        <TextBlock Text="撮影して送信" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,10,0"/>
        <local:ShortcutBox x:Name="HotkeyBox" Grid.Column="1" Text="Ctrl+Alt+S" Style="{StaticResource CompactTextBox}" FontSize="13" Padding="10,7" AutomationProperties.Name="撮影・送信ショートカットを記録" TextChanged="Edited" GotKeyboardFocus="ShortcutFocusEntered" LostKeyboardFocus="ShortcutFocusLeft"/>
@@ -43,6 +45,8 @@
        <local:ShortcutBox x:Name="StockHotkeyBox" Grid.Row="2" Grid.Column="1" Style="{StaticResource CompactTextBox}" FontSize="13" Padding="10,7" AutomationProperties.Name="ストック用ショートカットを記録" TextChanged="Edited" GotKeyboardFocus="ShortcutFocusEntered" LostKeyboardFocus="ShortcutFocusLeft"/>
       </Grid>
       <TextBlock x:Name="ShortcutHint" Text="キー欄をクリックして変更 · 保存すると反映" Style="{StaticResource Muted}" Margin="0,8,0,0"/>
+       </StackPanel>
+      </Border>
       <Border BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,10,0,0">
        <StackPanel>
         <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
