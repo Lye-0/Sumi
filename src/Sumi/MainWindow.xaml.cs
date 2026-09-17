@@ -90,7 +90,8 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
 #endif
         StatusText.Text = text;
-        StockCount.Text = $"ストック：{_stock.Count}枚";
+        StockCount.Text = $"ストック  {_stock.Count}枚";
+        ClearStockButton.IsEnabled = _stock.Count > 0 && !_busy && !_exiting;
         if (_tray != null) _tray.Text = (_busy ? "Sumi · 処理中" : _ready ? "Sumi · 待機中" : "Sumi · 停止中") + $" · ストック{_stock.Count}枚";
     }
     private void ShowSettings() { Show(); WindowState = WindowState.Normal; Activate(); }
@@ -125,7 +126,7 @@ public partial class MainWindow : Window
     private void ShortcutFocusLeft(object sender, KeyboardFocusChangedEventArgs e)
     {
         if (!_loaded) return;
-        ShortcutHint.Text = "クリックしてキーの組み合わせを入力";
+        ShortcutHint.Text = "キー欄をクリックして変更 · 保存すると反映";
         if (!_ready || _exiting) return;
         try { RegisterShortcuts(_settings); }
         catch (Exception ex) { _ready = false; UpdateControls(); Status(ex.Message); }
@@ -225,7 +226,8 @@ public partial class MainWindow : Window
         StartButton.IsEnabled = canPrepare;
         ModelBox.IsEnabled = canPrepare; RefreshButton.IsEnabled = canPrepare;
         OllamaPathBox.IsEnabled = canPrepare; OllamaBrowseButton.IsEnabled = canPrepare;
-        HotkeyBox.IsEnabled = StockHotkeyBox.IsEnabled = ClearStockButton.IsEnabled = !_busy && !_exiting;
+        HotkeyBox.IsEnabled = StockHotkeyBox.IsEnabled = !_busy && !_exiting;
+        ClearStockButton.IsEnabled = _stock.Count > 0 && !_busy && !_exiting;
         PauseButton.IsEnabled = (_busy || _ready) && !_exiting;
         PauseButton.Content = _busy ? "キャンセル" : "一時停止";
         if (_tray != null) _tray.Text = (_busy ? "Sumi · 処理中" : _ready ? "Sumi · 待機中" : "Sumi · 停止中") + $" · ストック{_stock.Count}枚";
