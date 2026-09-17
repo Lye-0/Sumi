@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Text;
 using Sumi.Core;
 
@@ -45,6 +46,27 @@ Check(OllamaCli.ParseModels("NAME ID SIZE\ngemma4:12b abc 7 GB\nx:cloud xyz -\nq
 var start = ProcessRunner.StartInfo("ollama.exe", ["run", "gemma4:12b"]);
 Check(!start.UseShellExecute && start.CreateNoWindow && start.ArgumentList.SequenceEqual(new[] { "run", "gemma4:12b" }), "no shell, no model tuning flags");
 Check(start.Environment["OLLAMA_HOST"] == "127.0.0.1:11434", "local endpoint pinned in child only");
+Exception? inputFailure = null;
+var inputThread = new Thread(() =>
+{
+    try
+    {
+        var box = new Sumi.DigitsBox();
+        foreach (var sample in new[] { ("42", false), ("4a2", true), ("１２", true), ("12\n", true), ("-1", true) })
+        {
+            var data = new System.Windows.DataObject(System.Windows.DataFormats.UnicodeText, sample.Item1);
+            var paste = new System.Windows.DataObjectPastingEventArgs(data, false, System.Windows.DataFormats.UnicodeText);
+            box.RaiseEvent(paste);
+            Check(paste.CommandCancelled == sample.Item2, "numeric paste accepts only ASCII digits: " + sample.Item1.Replace("\n", "\\n"));
+        }
+        Check(!box.AllowDrop && !System.Windows.Input.InputMethod.GetIsInputMethodEnabled(box), "numeric field blocks drag/drop and IME bypass");
+        var shortcut = new Sumi.ShortcutBox();
+        Check(shortcut.IsReadOnly && !shortcut.AllowDrop, "shortcut recorder blocks free text and file drops");
+    }
+    catch (Exception ex) { inputFailure = ex; }
+});
+inputThread.SetApartmentState(ApartmentState.STA); inputThread.Start(); inputThread.Join();
+if (inputFailure != null) throw new Exception("Input control regression failed", inputFailure);
 var root = Path.Combine(Path.GetTempPath(), "sumi-tests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
 try

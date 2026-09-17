@@ -55,7 +55,7 @@ internal static class Appearance
         Set("AccentBrush", dark ? "#B2E3D6" : "#235F53");
         Set("AccentTextBrush", dark ? "#102E28" : "#FFFFFF");
         foreach (Window w in System.Windows.Application.Current.Windows)
-            if (w is MainWindow or AnswerWindow) Native.ConfigureFrame(w, theme);
+            if (w is MainWindow or AnswerWindow or InformationWindow) Native.ConfigureFrame(w, theme);
     }
     private static void Set(string key, string color) => System.Windows.Application.Current.Resources[key] =
         new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));

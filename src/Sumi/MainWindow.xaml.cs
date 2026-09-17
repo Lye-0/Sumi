@@ -88,9 +88,9 @@ public partial class MainWindow : Window
     private void EditedSelection(object sender, SelectionChangedEventArgs e) => Dirty();
     private void EditedCheck(object sender, RoutedEventArgs e) => Dirty();
     private void Dirty() { if (_loaded && !_syncingModels) SaveHint.Text = "未保存の変更があります。保存すると次の撮影から反映されます。"; }
-    private void ProviderEdited(object sender, TextChangedEventArgs e) { if (_loaded) { Dirty(); Pause(); } }
+    private void ProviderEdited(object sender, TextChangedEventArgs e) => Dirty();
     private void ModelChanged(object sender, SelectionChangedEventArgs e)
-    { UpdatePreview(); if (_loaded && !_syncingModels) { Dirty(); if (ModelBox.SelectedItem as string != _preparedModel) Pause(); } }
+    { UpdatePreview(); if (_loaded && !_syncingModels) Dirty(); }
     private void UpdatePreview() { if (CommandText != null) CommandText.Text = $"ollama run {ModelBox.SelectedItem as string ?? "<モデル>"}"; }
     private void ToggleTheme(object sender, RoutedEventArgs e)
     {
@@ -100,6 +100,46 @@ public partial class MainWindow : Window
     }
     private void GlassChanged(object sender, RoutedEventArgs e)
     { if (_loaded) { Appearance.Apply(_settings.Theme, GlassCheck.IsChecked == true); Dirty(); } }
+
+    private void ShortcutFocusEntered(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (!_loaded) return;
+        _hotkey?.Pause();
+        ShortcutHint.Text = "キーを押してください · Escで終了 · 保存すると反映";
+    }
+    private void ShortcutFocusLeft(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (!_loaded) return;
+        ShortcutHint.Text = "クリックしてキーの組み合わせを入力";
+        if (!_ready || _exiting) return;
+        try { _hotkey!.Register(_settings.Hotkey); }
+        catch (Exception ex) { _ready = false; UpdateControls(); Status(ex.Message); }
+    }
+
+    private void BrowseImageDirectory(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        { Title = "撮影画像の保存先", Multiselect = false };
+        var path = ImageDirectoryBox.Text.Trim();
+        if (Directory.Exists(path)) dialog.InitialDirectory = path;
+        else dialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+        if (dialog.ShowDialog(this) == true) ImageDirectoryBox.Text = dialog.FolderName;
+    }
+    private void BrowseOllama(object sender, RoutedEventArgs e)
+    {
+        if (_ready || _busy || _refresh != null) return;
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        { Title = "Ollama実行ファイルを選択", Filter = "実行ファイル (*.exe)|*.exe", CheckFileExists = true, Multiselect = false };
+        try
+        {
+            var path = OllamaCli.ResolveExecutable(OllamaPathBox.Text);
+            dialog.InitialDirectory = Path.GetDirectoryName(path); dialog.FileName = Path.GetFileName(path);
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException) { }
+        if (dialog.ShowDialog(this) == true) OllamaPathBox.Text = dialog.FileName;
+    }
+    private void ShowInformation(object sender, RoutedEventArgs e)
+    { new InformationWindow(_store, _settings) { Owner = this }.ShowDialog(); }
 
     private Settings ReadSettings()
     {
@@ -134,10 +174,9 @@ public partial class MainWindow : Window
     private async void RefreshModels(object sender, RoutedEventArgs e) => await RefreshModelsAsync();
     private async Task RefreshModelsAsync()
     {
-        if (_busy) return;
-        _refresh?.Cancel();
+        if (_busy || _ready || _refresh != null || _exiting) return;
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20)); _refresh = cts;
-        RefreshButton.IsEnabled = false; StartButton.IsEnabled = false;
+        UpdateControls();
         try
         {
             var selected = ModelBox.SelectedItem as string ?? _settings.Model;
@@ -153,17 +192,26 @@ public partial class MainWindow : Window
         }
         catch (OperationCanceledException) { if (!_exiting) Status("モデル一覧の取得を中断しました。Ollamaの起動状態を確認してください。"); }
         catch (Exception ex) { Status(ex.Message); }
-        finally { if (_refresh == cts) { _refresh = null; RefreshButton.IsEnabled = true; StartButton.IsEnabled = !_busy; } }
+        finally { if (_refresh == cts) { _refresh = null; UpdateControls(); } }
     }
     private void SetBusy(bool busy)
     {
-        _busy = busy; StartButton.IsEnabled = !busy; ModelBox.IsEnabled = !busy; RefreshButton.IsEnabled = !busy;
-        OllamaPathBox.IsEnabled = !busy; PauseButton.IsEnabled = busy || _ready; PauseButton.Content = busy ? "キャンセル" : "一時停止";
-        if (_tray != null) _tray.Text = busy ? "Sumi · 処理中" : _ready ? "Sumi · 待機中" : "Sumi · 停止中";
+        _busy = busy; UpdateControls();
+    }
+    private void UpdateControls()
+    {
+        bool canPrepare = !_busy && !_ready && _refresh == null && !_exiting;
+        StartButton.IsEnabled = canPrepare;
+        ModelBox.IsEnabled = canPrepare; RefreshButton.IsEnabled = canPrepare;
+        OllamaPathBox.IsEnabled = canPrepare; OllamaBrowseButton.IsEnabled = canPrepare;
+        HotkeyBox.IsEnabled = !_busy && !_exiting;
+        PauseButton.IsEnabled = (_busy || _ready) && !_exiting;
+        PauseButton.Content = _busy ? "キャンセル" : "一時停止";
+        if (_tray != null) _tray.Text = _busy ? "Sumi · 処理中" : _ready ? "Sumi · 待機中" : "Sumi · 停止中";
     }
     private async void StartClicked(object sender, RoutedEventArgs e)
     {
-        if (_busy) return;
+        if (_busy || _ready || _refresh != null || _exiting) return;
         try { SaveSettings(); } catch (Exception ex) { Status(ex.Message); return; }
         _hotkey?.Pause(); _ready = false; SetBusy(true);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(_settings.TimeoutSeconds)); _operation = cts;
@@ -187,7 +235,7 @@ public partial class MainWindow : Window
     private void Pause()
     {
         _hotkey?.Pause(); _ready = false; _operation?.Cancel(); _capture?.Cancel();
-        PauseButton.IsEnabled = _busy; Status("停止中 · 再開するときは「モデルを準備して開始」を押してください。");
+        UpdateControls(); Status("停止中 · モデルを変更するか、そのまま再開できます。");
     }
     private async Task CaptureAsync()
     {
