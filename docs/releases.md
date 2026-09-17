@@ -21,8 +21,8 @@ git push origin v0.1.0
 ## 実行内容
 
 1. タグのソースを取得し、.NET 10 SDKでオフラインの回帰テストを実行する。
-2. Windows x64／Arm64をRelease・self-contained・トリミングなしでpublishする。
-3. 実行ファイル、依存DLL、.NETランタイム、GPLライセンス、同梱ランタイムのライセンス、起動手順をZIPにまとめる。
+2. Windows x64／Arm64をRelease・self-contained・単一ファイル・トリミングなしでpublishする。
+3. 依存DLLと.NETランタイムをSumi.exeへ同梱し、GPLライセンス・ランタイムのライセンス・起動手順をdocsへまとめてZIPにする。
 4. ZIPごとにSHA-256ファイルを作成する。
 5. 両方のパッケージが成功した後、GitHubの下書きリリースを作成し、添付完了後に公開する。
 
@@ -58,3 +58,5 @@ Arm64版はクロスビルドを検証しており、Arm64実機での動作は�
 
 出力先は`artifacts/releases`です。この操作はタグ作成・push・GitHub公開・インストールを行いません。
 ランタイムパック取得のため、初回publishにはネットワーク接続が必要です。
+
+配布フォルダー直下はSumi.exeとdocsのみです。IncludeNativeLibrariesForSelfExtractによりネイティブDLLもEXEへ同梱し、起動時は.NETの展開キャッシュを使用します。設定の保存先は引き続き本体と独立しています。

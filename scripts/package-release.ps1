@@ -21,15 +21,19 @@ try {
     foreach ($rid in ($Runtime | Select-Object -Unique)) {
         $name = "Sumi-$Tag-$rid"
         $publish = Join-Path $stagingRoot $name
-        & dotnet publish (Join-Path $repoRoot 'src/Sumi/Sumi.csproj') -c Release -r $rid --self-contained true -o $publish "-p:Version=$version" '-p:PublishSingleFile=false' '-p:PublishTrimmed=false' '-p:DebugType=none' '-p:DebugSymbols=false'
+        & dotnet publish (Join-Path $repoRoot 'src/Sumi/Sumi.csproj') -c Release -r $rid --self-contained true -o $publish "-p:Version=$version" '-p:PublishSingleFile=true' '-p:IncludeNativeLibrariesForSelfExtract=true' '-p:PublishTrimmed=false' '-p:DebugType=none' '-p:DebugSymbols=false'
         if ($LASTEXITCODE -ne 0) { throw "Publish failed for $rid." }
-        if (!(Test-Path (Join-Path $publish 'Sumi.exe')) -or !(Test-Path (Join-Path $publish 'coreclr.dll'))) { throw 'Self-contained publish is incomplete.' }
-        Copy-Item (Join-Path $repoRoot 'LICENSE') (Join-Path $publish 'LICENSE')
-        Copy-Item (Join-Path $repoRoot 'docs/distribution-readme.txt') (Join-Path $publish 'README.txt')
+        if (!(Test-Path (Join-Path $publish 'Sumi.exe')) -or (Test-Path (Join-Path $publish 'coreclr.dll'))) { throw 'Single-file publish is incomplete.' }
+        $documents = Join-Path $publish 'docs'
+        [IO.Directory]::CreateDirectory($documents) | Out-Null
+        Copy-Item (Join-Path $repoRoot 'LICENSE') (Join-Path $documents 'LICENSE')
+        $looseLicense = Join-Path $publish 'LICENSE'
+        if (Test-Path -LiteralPath $looseLicense) { Remove-Item -LiteralPath $looseLicense }
+        Copy-Item (Join-Path $repoRoot 'docs/distribution-readme.txt') (Join-Path $documents 'README.txt')
         # Include the runtime's license and third-party notices from the exact restored packages.
         $assetFile = Join-Path $repoRoot 'src/Sumi/obj/project.assets.json'
         $assets = Get-Content -LiteralPath $assetFile -Raw | ConvertFrom-Json
-        $notices = Join-Path $publish 'licenses'
+        $notices = Join-Path $documents 'licenses'
         [IO.Directory]::CreateDirectory($notices) | Out-Null
         $runtimePackages = @($assets.project.frameworks.PSObject.Properties.Value.downloadDependencies | Where-Object { $_.name -match '^Microsoft\.(NETCore|WindowsDesktop)\.App\.Runtime\.' })
         if ($runtimePackages.Count -lt 2) { throw 'Runtime package metadata is missing.' }
@@ -48,6 +52,8 @@ try {
             }
             if (!$found) { throw "Runtime license notices not found for $($library.name)." }
         }
+        $unexpected = @(Get-ChildItem -LiteralPath $publish -Force | Where-Object { $_.Name -notin @('Sumi.exe','docs') })
+        if ($unexpected.Count -gt 0) { throw "Unexpected loose files in single-file package: $($unexpected.Name -join ', ')" }
         $zip = Join-Path $outputRoot "$name.zip"
         Compress-Archive -Path $publish -DestinationPath $zip -CompressionLevel Optimal -Force
         $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()

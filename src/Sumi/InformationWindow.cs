@@ -54,7 +54,7 @@ internal sealed class InformationWindow : Window
         var relocation = new TextBlock
         {
             Text = "1. トレイまたは設定画面からSumiを完全終了します。\n\n"
-                + "2. 本体フォルダー一式を、使いたい場所へコピーします。Sumi.exeだけでなく、DLLなど同梱ファイルもまとめて移します。\n\n"
+                + "2. 本体フォルダー一式を、使いたい場所へコピーします。Sumi.exeと付属資料など、同梱ファイルをまとめて移します。\n\n"
                 + "3. 新しい場所のSumi.exeを起動して動作を確認します。自分で作成したショートカットがあれば、リンク先も変更してください。\n\n"
                 + "通常のRelease版では設定はユーザーのLocalAppData内に保存されるため、本体の配置先を変えても引き継がれます。\n\n"
                 + "開発中のbinはビルド出力先です。恒久的な設置先として登録しません。Debug版の既定データは実行ファイル横の.dev-data、開発スクリプト使用時はリポジトリ内の.dev-dataです。--data-dirやSUMI_DATA_DIRの指定があれば、その指定が優先されます。",
