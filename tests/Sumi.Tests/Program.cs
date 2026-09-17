@@ -206,6 +206,8 @@ try
     var history = new ThinkingHistory();
     await Reject(() => new OllamaCli("ollama.exe", thoughtRun).AnswerAsync("gemma4:12b", "answer", file, null, default, thinking: history), "thinking-only still fails after retry");
     Check(history.Snapshot().SequenceEqual(new[] { new ThinkingUpdate(1, "first thought"), new ThinkingUpdate(2, "retry thought") }), "both attempts survive final-answer failure");
+    Check(history.ClipboardFallback(Delivery.Clipboard) == "retry thought" && history.ClipboardFallback(Delivery.Both) == "retry thought", "clipboard fallback uses latest nonempty thinking for both clipboard modes");
+    Check(history.ClipboardFallback(Delivery.Panel) == "" && new ThinkingHistory().ClipboardFallback(Delivery.Clipboard) == "", "no clipboard fallback for panel-only or missing thoughts");
     var recoverThought = new FakeRunner();
     recoverThought.Responses.Enqueue(new(0, "<think>one", ""));
     recoverThought.Responses.Enqueue(new(0, "<think>two</think>D", ""));

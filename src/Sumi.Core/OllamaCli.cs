@@ -198,7 +198,7 @@ public sealed partial class OllamaCli(string executable, ICommandRunner? runner 
                     : "回答本文が空だったため、1回だけ再試行します…");
                 continue;
             }
-            throw new InvalidOperationException(thinkingOnly
+            throw new MissingAnswerException(thinkingOnly
                 ? "モデルが思考のみを返し、回答本文を取得できませんでした。1回再試行しましたが同じ状態です。指示文を調整するか、もう一度撮影してください。"
                 : "モデルの回答本文が空でした。1回再試行しましたが取得できませんでした。指示文を調整するか、もう一度撮影してください。");
         }

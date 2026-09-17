@@ -313,7 +313,8 @@ public partial class MainWindow : Window
             {
                 if (!cts.IsCancellationRequested && !_exiting && _operation == cts) Status(text);
             });
-            var answer = await provider.AnswerAsync(settings.Model, settings.Prompt, temp, progress, cts.Token, generationStatus, settings.ShowThinking ? thoughts : null);
+            var answer = await provider.AnswerAsync(settings.Model, settings.Prompt, temp, progress, cts.Token, generationStatus,
+                settings.ShowThinking || settings.Delivery != Delivery.Panel ? thoughts : null);
             thoughtTimer.Stop();
             generationComplete = true;
             cts.Token.ThrowIfCancellationRequested();
@@ -338,13 +339,29 @@ public partial class MainWindow : Window
         {
             thoughtTimer.Stop(); _latest = ""; RecentAnswer.Text = "";
             _latestError = ex.Message; RecentError.Text = ex.Message;
-            _panelDismissed = false; Status(ex.Message);
-            if (!_exiting) ShowAnswer(ex.Message, true, settings, true);
+            if (!_exiting && ex is MissingAnswerException)
+            {
+                var fallback = thoughts.ClipboardFallback(settings.Delivery);
+                if (fallback.Length > 0)
+                {
+                    try
+                    {
+                        await SetClipboardAsync(() => System.Windows.Clipboard.SetText(fallback));
+                        _latestError += "\n回答本文がないため、最後に取得した思考内容をクリップボードへコピーしました。";
+                    }
+                    catch (System.Runtime.InteropServices.COMException)
+                    { _latestError += "\n思考内容をクリップボードへコピーできませんでした。"; }
+                }
+            }
+            RecentError.Text = _latestError;
+            _panelDismissed = false; Status(_latestError);
+            if (!_exiting) ShowAnswer(_latestError, true, settings, true);
         }
         finally
         {
             thoughtTimer.Stop();
             if (settings.ShowThinking && _settings.ShowThinking) _recentThinking.Update(thoughts.Snapshot());
+            else _thoughts = new();
             _capture = null;
             if (temp != null) { try { File.Delete(temp); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status("一時画像を削除できませんでした。設定フォルダーのtempを確認してください。"); } }
             _operation = null; SetBusy(false);

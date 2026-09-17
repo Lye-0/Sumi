@@ -1,6 +1,7 @@
 namespace Sumi.Core;
 
 public sealed record ThinkingUpdate(int Attempt, string Text);
+public sealed class MissingAnswerException(string message) : InvalidOperationException(message);
 
 // CLI callbacks run off the UI thread. The UI samples snapshots at a bounded rate.
 public sealed class ThinkingHistory : IProgress<ThinkingUpdate>
@@ -16,4 +17,6 @@ public sealed class ThinkingHistory : IProgress<ThinkingUpdate>
     {
         lock (_gate) return _attempts.Select(p => new ThinkingUpdate(p.Key, p.Value)).ToArray();
     }
+    public string ClipboardFallback(Delivery delivery) => delivery == Delivery.Panel ? ""
+        : Snapshot().LastOrDefault(p => !string.IsNullOrWhiteSpace(p.Text))?.Text ?? "";
 }
