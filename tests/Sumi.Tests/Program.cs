@@ -76,6 +76,8 @@ var panelThread = new Thread(() =>
         var thinking = (System.Windows.Controls.Expander)type.GetField("_thinking", flags)!.GetValue(minimal)!;
         Check(minimal.Width < window.Width && root.Children.Count == 1, "minimal notification contains only answer/thinking scroll area");
         Check(!((System.Windows.Controls.StackPanel)thinking.Content).Children.OfType<System.Windows.Controls.Button>().Any(), "minimal thinking has no copy buttons");
+        var compactThought = ((System.Windows.Controls.StackPanel)thinking.Content).Children.OfType<System.Windows.Controls.TextBox>().Single();
+        Check(compactThought.MaxLines == 2 && compactThought.MaxHeight == 32 && compactThought.Text.Contains("retry"), "minimal thinking shares a two-line scroll viewport across retries");
         double MeasureAnswer(string text)
         {
             var sample = (System.Windows.Window)Activator.CreateInstance(type, new Settings { Delivery = Delivery.Minimal }, (Action)(() => { }), (Func<string, Task>)(_ => Task.CompletedTask))!;

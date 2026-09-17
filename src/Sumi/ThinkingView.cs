@@ -33,6 +33,31 @@ internal sealed class ThinkingView : Expander
     public void Update(ThinkingUpdate[] attempts)
     {
         Visibility = attempts.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        if (_minimal)
+        {
+            if (!_texts.TryGetValue(0, out var compact))
+            {
+                compact = new TextBox { IsReadOnly = true, TextWrapping = TextWrapping.Wrap,
+                    MinLines = 1, MaxLines = 2, MaxHeight = 32, FontSize = 11,
+                    Padding = new Thickness(0), BorderThickness = new Thickness(0),
+                    Background = System.Windows.Media.Brushes.Transparent,
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+                TextBlock.SetLineHeight(compact, 16);
+                TextBlock.SetLineStackingStrategy(compact, LineStackingStrategy.BlockLineHeight);
+                AutomationProperties.SetName(compact, "思考内容");
+                _texts.Add(0, compact); _items.Children.Add(compact);
+            }
+            // All attempts share one two-line viewport; retries must not add height.
+            var text = attempts.Length == 1 ? attempts[0].Text : string.Join("\n\n", attempts.Select(a =>
+                $"{(a.Attempt == 1 ? "1回目" : "再試行")}\n{a.Text}"));
+            if (compact.Text != text)
+            {
+                var offset = compact.VerticalOffset;
+                compact.Text = text; compact.ScrollToVerticalOffset(offset);
+            }
+            return;
+        }
         foreach (var attempt in attempts)
         {
             if (!_texts.TryGetValue(attempt.Attempt, out var box))
@@ -41,7 +66,6 @@ internal sealed class ThinkingView : Expander
                 box = new TextBox { IsReadOnly = true, TextWrapping = TextWrapping.Wrap,
                     MaxHeight = 240, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
                 AutomationProperties.SetName(box, $"思考内容 · {label}");
-                if (_minimal) { box.MaxHeight = 140; box.FontSize = 11; box.Padding = new Thickness(0); box.BorderThickness = new Thickness(0); box.Background = System.Windows.Media.Brushes.Transparent; }
                 _texts.Add(attempt.Attempt, box);
                 var heading = new TextBlock { Text = label, Margin = new Thickness(0, 6, 0, 6) };
                 heading.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
@@ -51,7 +75,7 @@ internal sealed class ThinkingView : Expander
                 var button = new Button { Content = "思考内容をコピー", HorizontalAlignment = HorizontalAlignment.Right,
                     Margin = new Thickness(0, 6, 0, 8), Padding = new Thickness(10, 6, 10, 6) };
                 button.Click += async (_, _) => await _copy(captured.Text);
-                if (!_minimal) _items.Children.Add(button);
+                _items.Children.Add(button);
             }
             if (box.Text == attempt.Text) continue;
             bool follow = box.VerticalOffset >= box.ExtentHeight - box.ViewportHeight - 2;
