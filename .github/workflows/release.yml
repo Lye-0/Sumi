@@ -43,7 +43,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 45
     permissions:
       contents: write
     steps:
@@ -71,5 +71,30 @@ jobs:
             if [[ "$RELEASE_TAG" == *-* ]]; then options+=(--prerelease); fi
             gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes --title "Sumi $RELEASE_TAG" "${options[@]}"
           fi
-          gh release upload "$RELEASE_TAG" ./*.zip ./*.sha256 --clobber
+          # Upload separately so a failure can be retried for that asset alone.
+          for asset in ./*.zip ./*.sha256; do
+            uploaded=false
+            for attempt in 1 2 3; do
+              echo "Uploading $(basename "$asset") (attempt $attempt/3)"
+              if timeout 180s gh release upload "$RELEASE_TAG" "$asset" --clobber; then
+                uploaded=true
+                break
+              fi
+              if [ "$attempt" -lt 3 ]; then sleep $((attempt * 10)); fi
+            done
+            if [ "$uploaded" != true ]; then
+              echo "Upload failed: $asset. Release remains a draft." >&2
+              exit 1
+            fi
+          done
+          # Verify GitHub's recorded digest, size and state before publishing.
+          gh release view "$RELEASE_TAG" --json assets > /tmp/sumi-release-assets.json
+          for asset in ./*.zip ./*.sha256; do
+            name=$(basename "$asset")
+            size=$(stat -c %s "$asset")
+            digest="sha256:$(sha256sum "$asset" | cut -d ' ' -f 1)"
+            jq -e --arg name "$name" --argjson size "$size" --arg digest "$digest" \
+              '[.assets[] | select(.name == $name and .state == "uploaded" and .size == $size and .digest == $digest)] | length == 1' \
+              /tmp/sumi-release-assets.json > /dev/null
+          done
           gh release edit "$RELEASE_TAG" --draft=false
