@@ -21,7 +21,7 @@ internal sealed class AnswerWindow : Window
     private string _answer = "";
     public AnswerWindow(Settings settings, Action showFull, Func<string, Task> copy)
     {
-        _minimal = settings.Delivery == Delivery.Minimal;
+        _minimal = settings.Delivery is Delivery.Minimal or Delivery.MinimalBoth;
         Title = "Sumi · 回答"; Width = _minimal ? 240 : 380; SizeToContent = SizeToContent.Height;
         FontFamily = new System.Windows.Media.FontFamily("Yu Gothic UI, Segoe UI"); FontSize = 14;
         SetResourceReference(BackgroundProperty, "WindowBrush"); SetResourceReference(ForegroundProperty, "TextBrush");

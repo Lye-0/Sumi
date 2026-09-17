@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace Sumi.Core;
 
-public enum Delivery { Panel, Clipboard, Both, Minimal }
+public enum Delivery { Panel = 0, Clipboard = 1, Both = 2, Minimal = 3, MinimalBoth = 4 }
 public enum Theme { Dark, Light }
 
 public sealed record Settings

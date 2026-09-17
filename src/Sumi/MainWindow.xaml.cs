@@ -36,7 +36,7 @@ public partial class MainWindow : Window
         _recentThinking = new ThinkingView(CopyTextAsync); RecentThinkingHost.Children.Add(_recentThinking);
         ThinkingCheck.IsChecked = settings.ShowThinking;
         PromptBox.Text = settings.Prompt; HotkeyBox.Text = settings.Hotkey;
-        DeliveryBox.SelectedIndex = (int)settings.Delivery;
+        DeliveryBox.SelectedValue = settings.Delivery;
         ModelBox.Items.Add(settings.Model); ModelBox.SelectedItem = settings.Model;
         GlassCheck.IsChecked = settings.Glass; SaveImagesCheck.IsChecked = settings.SaveImages;
         CopyImagesCheck.IsChecked = settings.CopyImages; ImageDirectoryBox.Text = settings.ImageDirectory;
@@ -162,7 +162,7 @@ public partial class MainWindow : Window
         if (imageDirectory.Length > 0 && !Path.IsPathFullyQualified(imageDirectory))
             throw new InvalidOperationException("画像の保存先は絶対パスで指定してください。");
         return _settings with { Prompt = PromptBox.Text, Model = model, Hotkey = HotkeyBox.Text.Trim(),
-            Delivery = (Delivery)DeliveryBox.SelectedIndex, Glass = GlassCheck.IsChecked == true,
+            Delivery = (Delivery)DeliveryBox.SelectedValue, Glass = GlassCheck.IsChecked == true,
             SaveImages = SaveImagesCheck.IsChecked == true, CopyImages = CopyImagesCheck.IsChecked == true, ShowThinking = ThinkingCheck.IsChecked == true,
             ImageDirectory = imageDirectory, OllamaPath = OllamaPathBox.Text.Trim(), DisplaySeconds = seconds, TimeoutSeconds = timeout };
     }
@@ -314,12 +314,12 @@ public partial class MainWindow : Window
                 if (!cts.IsCancellationRequested && !_exiting && _operation == cts) Status(text);
             });
             var answer = await provider.AnswerAsync(settings.Model, settings.Prompt, temp, progress, cts.Token, generationStatus,
-                settings.ShowThinking || settings.Delivery is (Delivery.Clipboard or Delivery.Both) ? thoughts : null);
+                settings.ShowThinking || settings.Delivery is (Delivery.Clipboard or Delivery.Both or Delivery.MinimalBoth) ? thoughts : null);
             thoughtTimer.Stop();
             generationComplete = true;
             cts.Token.ThrowIfCancellationRequested();
             _latest = answer; RecentAnswer.Text = answer;
-            if (settings.Delivery is Delivery.Clipboard or Delivery.Both)
+            if (settings.Delivery is Delivery.Clipboard or Delivery.Both or Delivery.MinimalBoth)
             {
                 try { await SetClipboardAsync(() => System.Windows.Clipboard.SetText(answer)); }
                 catch (System.Runtime.InteropServices.COMException) { sideEffectWarning = "回答をコピーできませんでした。直近の回答から再試行できます。"; }

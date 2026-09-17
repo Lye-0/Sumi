@@ -17,6 +17,6 @@ public sealed class ThinkingHistory : IProgress<ThinkingUpdate>
     {
         lock (_gate) return _attempts.Select(p => new ThinkingUpdate(p.Key, p.Value)).ToArray();
     }
-    public string ClipboardFallback(Delivery delivery) => delivery is not (Delivery.Clipboard or Delivery.Both) ? ""
+    public string ClipboardFallback(Delivery delivery) => delivery is not (Delivery.Clipboard or Delivery.Both or Delivery.MinimalBoth) ? ""
         : Snapshot().LastOrDefault(p => !string.IsNullOrWhiteSpace(p.Text))?.Text ?? "";
 }

@@ -70,7 +70,7 @@ var panelThread = new Thread(() =>
         type.GetMethod("ClearThinking")!.Invoke(window, null);
         Check(expander.Visibility == System.Windows.Visibility.Collapsed, "disabling thinking hides retained view");
         window.Close();
-        var minimal = (System.Windows.Window)Activator.CreateInstance(type, new Settings { Delivery = Delivery.Minimal, ShowThinking = true }, (Action)(() => { }), (Func<string, Task>)(_ => Task.CompletedTask))!;
+        var minimal = (System.Windows.Window)Activator.CreateInstance(type, new Settings { Delivery = Delivery.MinimalBoth, ShowThinking = true }, (Action)(() => { }), (Func<string, Task>)(_ => Task.CompletedTask))!;
         update.Invoke(minimal, ["D", true, false, data]);
         var root = (System.Windows.Controls.StackPanel)((System.Windows.Controls.Border)minimal.Content).Child;
         var thinking = (System.Windows.Controls.Expander)type.GetField("_thinking", flags)!.GetValue(minimal)!;
@@ -159,6 +159,11 @@ Directory.CreateDirectory(root);
 try
 {
     var store = new SettingsStore(root);
+    foreach (var delivery in Enum.GetValues<Delivery>())
+    {
+        store.Save(new Settings { Delivery = delivery });
+        Check(store.Load().Delivery == delivery, $"delivery setting round trip: {delivery}");
+    }
     store.Save(new Settings { Prompt = "日本語\n\"引用\"", Delivery = Delivery.Both });
     Check(store.Load().Prompt == "日本語\n\"引用\"" && store.Load().Delivery == Delivery.Both, "atomic settings round trip");
     var file = Path.Combine(root, "検証 画像.png"); await File.WriteAllTextAsync(file, "fixture");
@@ -223,7 +228,7 @@ try
     var history = new ThinkingHistory();
     await Reject(() => new OllamaCli("ollama.exe", thoughtRun).AnswerAsync("gemma4:12b", "answer", file, null, default, thinking: history), "thinking-only still fails after retry");
     Check(history.Snapshot().SequenceEqual(new[] { new ThinkingUpdate(1, "first thought"), new ThinkingUpdate(2, "retry thought") }), "both attempts survive final-answer failure");
-    Check(history.ClipboardFallback(Delivery.Clipboard) == "retry thought" && history.ClipboardFallback(Delivery.Both) == "retry thought", "clipboard fallback uses latest nonempty thinking for both clipboard modes");
+    Check(history.ClipboardFallback(Delivery.Clipboard) == "retry thought" && history.ClipboardFallback(Delivery.Both) == "retry thought" && history.ClipboardFallback(Delivery.MinimalBoth) == "retry thought", "clipboard fallback uses latest nonempty thinking for both clipboard modes");
     Check(history.ClipboardFallback(Delivery.Panel) == "" && new ThinkingHistory().ClipboardFallback(Delivery.Clipboard) == "", "no clipboard fallback for panel-only or missing thoughts");
     Check(history.ClipboardFallback(Delivery.Minimal) == "", "minimal notification does not copy to clipboard");
     var recoverThought = new FakeRunner();
