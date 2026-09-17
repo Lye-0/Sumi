@@ -53,7 +53,7 @@
          <TextBlock x:Name="StockCount" Text="ストック  0枚" VerticalAlignment="Center" FontWeight="SemiBold"/>
          <Button x:Name="ClearStockButton" Grid.Column="1" Content="すべて破棄" Click="ClearStockClicked" Padding="10,5" IsEnabled="False" ToolTip="ストックした画像をすべて破棄"/>
         </Grid>
-        <TextBlock Text="ストックがあれば、送信キーでまとめて送信。" Style="{StaticResource Muted}" Margin="0,6,0,0"/>
+        <TextBlock Text="送信キーで最後の1枚を撮影し、ストックと一緒に送信。" Style="{StaticResource Muted}" Margin="0,6,0,0"/>
        </StackPanel>
       </Border>
      </StackPanel>

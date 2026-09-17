@@ -294,7 +294,7 @@ public partial class MainWindow : Window
             { _capture = capture; result = await capture.RunAsync(); }
             _capture = null; cts.Token.ThrowIfCancellationRequested();
             if (result != null) _stock.Add(result.Png);
-            Status($"ストック：{_stock.Count}枚 · {_settings.Hotkey} でまとめて送信します。");
+            Status($"ストック：{_stock.Count}枚 · {_settings.Hotkey} で最後の1枚を撮影して送信します。");
         }
         catch (OperationCanceledException) { Status($"撮影を中断しました。ストック：{_stock.Count}枚"); }
         catch (Exception ex) { Status(ex.Message); if (!_exiting) ShowSettings(); }
@@ -327,19 +327,14 @@ public partial class MainWindow : Window
         {
             if (IsVisible) Hide();
             await Task.Delay(120, cts.Token); // Let our windows disappear before freezing the desktop.
-            byte[][] images;
-            if (fromStock) images = _stock.Snapshot();
-            else
-            {
-                Status("範囲を選択中 · Escでキャンセルできます。");
-                CaptureResult? result;
-                using (var capture = new CaptureSession())
-                { _capture = capture; result = await capture.RunAsync(); }
-                _capture = null;
-                cts.Token.ThrowIfCancellationRequested();
-                if (result == null) { Status("待機中 · 撮影をキャンセルしました。"); return; }
-                images = [result.Png];
-            }
+            Status("最後の画像を選択中 · Escでキャンセルできます。");
+            CaptureResult? result;
+            using (var capture = new CaptureSession())
+            { _capture = capture; result = await capture.RunAsync(); }
+            _capture = null;
+            cts.Token.ThrowIfCancellationRequested();
+            if (result == null) { Status("撮影をキャンセルしました。ストックは保持しています。"); return; }
+            var images = _stock.WithFinalImage(result.Png);
             cts.CancelAfter(TimeSpan.FromSeconds(settings.TimeoutSeconds));
             var tempRoot = Path.Combine(_store.Root, "temp"); Directory.CreateDirectory(tempRoot);
             string? sideEffectWarning = null;

@@ -14,5 +14,6 @@ public sealed class ImageStock
         _images.Add(png); Bytes += png.LongLength;
     }
     public byte[][] Snapshot() => _images.ToArray();
+    public byte[][] WithFinalImage(byte[] png) => [.. _images, png];
     public void Clear() { _images.Clear(); Bytes = 0; }
 }
