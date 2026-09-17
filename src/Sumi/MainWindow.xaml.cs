@@ -284,7 +284,11 @@ public partial class MainWindow : Window
                 if (cts.IsCancellationRequested || _exiting || _operation != cts || string.IsNullOrWhiteSpace(text)) return;
                 if (settings.Delivery != Delivery.Clipboard) ShowAnswer(text, false, settings);
             });
-            var answer = await provider.AnswerAsync(settings.Model, settings.Prompt, temp, progress, cts.Token);
+            var generationStatus = new Progress<string>(text =>
+            {
+                if (!cts.IsCancellationRequested && !_exiting && _operation == cts) Status(text);
+            });
+            var answer = await provider.AnswerAsync(settings.Model, settings.Prompt, temp, progress, cts.Token, generationStatus);
             cts.Token.ThrowIfCancellationRequested();
             _latest = answer; RecentAnswer.Text = answer;
             if (settings.Delivery != Delivery.Panel)

@@ -40,6 +40,7 @@ Check(OllamaCli.AnswerText("Thinking...\nprivate thought") == "", "partial reaso
 Check(OllamaCli.AnswerText("Thinking...\nthought\n...done thinking.\n\n答え") == "答え", "legacy CLI reasoning removed");
 Check(OllamaCli.AnswerText("<think>thought</think>\n42") == "42", "plain CLI reasoning removed");
 Check(OllamaCli.AnswerText("\u001b[?25l答え\u001b[0m") == "答え", "ANSI removed");
+Check(OllamaCli.FinalAnswerText("T") == "T" && OllamaCli.FinalAnswerText("<") == "<", "completed short answers are not mistaken for streamed markers");
 foreach (string prefix in new[] { "T", "Thinking..", "<thi", "<think>thought" })
     Check(OllamaCli.AnswerText(prefix) == "", "stream prefix " + prefix);
 Check(OllamaCli.ParseModels("NAME ID SIZE\ngemma4:12b abc 7 GB\nx:cloud xyz -\nq:8b def 3 GB\n").SequenceEqual(new[] { "gemma4:12b", "q:8b" }), "model listing / cloud tags excluded");
@@ -85,6 +86,50 @@ try
     await Reject(() => provider.PrepareAsync("not-installed", default), "missing model never reaches run / pull");
     fake.Remote = true;
     await Reject(() => provider.PrepareAsync("gemma4:12b", default), "cloud alias rejected by show metadata");
+    var normal = new FakeRunner();
+    await new OllamaCli("ollama.exe", normal).AnswerAsync("gemma4:12b", injection, file, null, default);
+    Check(normal.GenerationCount == 1, "successful response does not retry");
+
+    var recovery = new FakeRunner();
+    recovery.Responses.Enqueue(new(0, "Thinking...\nAnswer: (D)\n\n", ""));
+    recovery.Responses.Enqueue(new(0, "Thinking...\nreason\n...done thinking.\n(D) complicated\n", ""));
+    var notices = new List<string>(); var streamed = new List<string>();
+    var recovered = await new OllamaCli("ollama.exe", recovery).AnswerAsync("gemma4:12b", injection, file,
+        new DirectProgress(streamed.Add), default, new DirectProgress(notices.Add));
+    Check(recovered == "(D) complicated" && recovery.GenerationCount == 2, "thinking-only output retries once and returns final answer");
+    Check(notices.Count == 1 && notices[0].Contains("思考のみ") && streamed.All(s => !s.Contains("Answer:")), "retry reason reported without exposing thinking as an answer");
+    var generations = recovery.Calls.Where(c => c.Args[0] == "run").ToArray();
+    Check(generations.All(c => c.Input == Path.GetFullPath(file) + "\n" + injection
+        && c.Args.SequenceEqual(new[] { "run", "gemma4:12b" })), "retry preserves exact image, prompt and default command");
+
+    var emptyRecovery = new FakeRunner();
+    emptyRecovery.Responses.Enqueue(new(0, "\n\n", ""));
+    emptyRecovery.Responses.Enqueue(new(0, "C", ""));
+    Check(await new OllamaCli("ollama.exe", emptyRecovery).AnswerAsync("gemma4:12b", injection, file, null, default) == "C"
+        && emptyRecovery.GenerationCount == 2, "empty output also retries once");
+
+    var exhausted = new FakeRunner();
+    exhausted.Responses.Enqueue(new(0, "Thinking...\nfirst", ""));
+    exhausted.Responses.Enqueue(new(0, "<think>second", ""));
+    try { await new OllamaCli("ollama.exe", exhausted).AnswerAsync("gemma4:12b", injection, file, null, default); throw new Exception("FAIL retry exhaustion"); }
+    catch (InvalidOperationException ex) { Check(ex.Message.Contains("思考のみ") && ex.Message.Contains("1回再試行"), "retry exhaustion explains thinking-only failure"); }
+    Check(exhausted.GenerationCount == 2, "retry limit is exactly two total generations");
+
+    var failed = new FakeRunner(); failed.Responses.Enqueue(new(1, "", "fixture failure"));
+    await Reject(() => new OllamaCli("ollama.exe", failed).AnswerAsync("gemma4:12b", injection, file, null, default), "CLI errors remain errors");
+    Check(failed.GenerationCount == 1, "CLI errors do not trigger automatic retry");
+
+    using var cancelled = new CancellationTokenSource();
+    var cancelledRun = new FakeRunner { AfterGeneration = _ => cancelled.Cancel() };
+    cancelledRun.Responses.Enqueue(new(0, "Thinking...\npartial", ""));
+    try { await new OllamaCli("ollama.exe", cancelledRun).AnswerAsync("gemma4:12b", injection, file, null, cancelled.Token); throw new Exception("FAIL cancellation"); }
+    catch (OperationCanceledException) { Check(cancelledRun.GenerationCount == 1, "cancelled generation never retries"); }
+
+    using var between = new CancellationTokenSource();
+    var betweenRun = new FakeRunner(); betweenRun.Responses.Enqueue(new(0, "", ""));
+    try { await new OllamaCli("ollama.exe", betweenRun).AnswerAsync("gemma4:12b", injection, file, null, between.Token,
+        new DirectProgress(_ => between.Cancel())); throw new Exception("FAIL cancel before retry"); }
+    catch (OperationCanceledException) { Check(betweenRun.GenerationCount == 1, "cancellation between attempts prevents next CLI launch"); }
     var exe = Environment.ProcessPath!;
     var runner = new ProcessRunner();
     var echo = await runner.RunAsync(exe, ["--child"], injection, null, default);
@@ -122,9 +167,20 @@ sealed class FakeRunner : ICommandRunner
 {
     public List<(IReadOnlyList<string> Args, string Input)> Calls { get; } = [];
     public bool Remote { get; set; }
+    public Queue<CommandResult> Responses { get; } = new();
+    public int GenerationCount { get; private set; }
+    public Action<int>? AfterGeneration { get; init; }
     public Task<CommandResult> RunAsync(string exe, IReadOnlyList<string> args, string input, IProgress<string>? progress, CancellationToken token)
     {
         Calls.Add((args, input));
+        token.ThrowIfCancellationRequested();
+        if (args[0] == "run" && input.Length > 0)
+        {
+            GenerationCount++;
+            var result = Responses.Count > 0 ? Responses.Dequeue() : new CommandResult(0, "<think>test</think>\n42", "");
+            progress?.Report(result.Output); AfterGeneration?.Invoke(GenerationCount);
+            return Task.FromResult(result);
+        }
         string output = args[0] switch { "ls" => "NAME ID SIZE\ngemma4:12b abc 7 GB\n",
             "show" => Remote ? "Remote URL https://ollama.com\nvision" : "Capabilities\n    vision\n    thinking\n",
             _ => input.Length == 0 ? "" : "<think>test</think>\n42" };

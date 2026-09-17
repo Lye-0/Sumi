@@ -8,7 +8,7 @@ public interface IModelProvider
 {
     Task<IReadOnlyList<string>> ListModelsAsync(CancellationToken token);
     Task PrepareAsync(string model, CancellationToken token);
-    Task<string> AnswerAsync(string model, string prompt, string imagePath, IProgress<string>? progress, CancellationToken token);
+    Task<string> AnswerAsync(string model, string prompt, string imagePath, IProgress<string>? progress, CancellationToken token, IProgress<string>? status = null);
     string Preview(string model);
 }
 
@@ -144,16 +144,37 @@ public sealed partial class OllamaCli(string executable, ICommandRunner? runner 
         await ValidateAsync(model, token);
         await RunAsync(["run", model], "", null, token);
     }
-    public async Task<string> AnswerAsync(string model, string prompt, string imagePath, IProgress<string>? progress, CancellationToken token)
+    public async Task<string> AnswerAsync(string model, string prompt, string imagePath, IProgress<string>? progress, CancellationToken token, IProgress<string>? status = null)
     {
         if (!File.Exists(imagePath)) throw new FileNotFoundException("撮影画像が見つかりません。", imagePath);
-        await ValidateAsync(model, token);
         // Pass text as stdin, never shell code or additional command-line arguments.
+        var input = $"{Path.GetFullPath(imagePath)}\n{prompt}";
         var adapter = progress == null ? null : new InlineProgress(s => progress.Report(AnswerText(s)));
-        var result = await RunAsync(["run", model], $"{Path.GetFullPath(imagePath)}\n{prompt}", adapter, token);
-        var answer = AnswerText(result.Output).Trim();
-        if (answer.Length == 0) throw new InvalidOperationException("モデルから回答本文を取得できませんでした。");
-        return answer;
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            // The caller's cancellation/deadline covers both attempts. Never reset it.
+            token.ThrowIfCancellationRequested();
+            await ValidateAsync(model, token);
+            token.ThrowIfCancellationRequested();
+            var result = await RunAsync(["run", model], input, adapter, token);
+            token.ThrowIfCancellationRequested();
+            var answer = FinalAnswerText(result.Output).Trim();
+            if (answer.Length > 0) return answer;
+            var clean = Clean(result.Output).TrimStart();
+            bool thinkingOnly = clean.StartsWith("Thinking...", StringComparison.Ordinal)
+                || clean.StartsWith("<think>", StringComparison.Ordinal);
+            if (attempt == 0)
+            {
+                status?.Report(thinkingOnly
+                    ? "思考のみで回答本文がなかったため、1回だけ再試行します…"
+                    : "回答本文が空だったため、1回だけ再試行します…");
+                continue;
+            }
+            throw new InvalidOperationException(thinkingOnly
+                ? "モデルが思考のみを返し、回答本文を取得できませんでした。1回再試行しましたが同じ状態です。指示文を調整するか、もう一度撮影してください。"
+                : "モデルの回答本文が空でした。1回再試行しましたが取得できませんでした。指示文を調整するか、もう一度撮影してください。");
+        }
+        throw new InvalidOperationException("回答本文を取得できませんでした。");
     }
     private async Task<CommandResult> RunAsync(string[] args, string input, IProgress<string>? progress, CancellationToken token)
     {
@@ -167,13 +188,17 @@ public sealed partial class OllamaCli(string executable, ICommandRunner? runner 
         return result;
     }
     public static string Clean(string text) => Ansi().Replace(text, "").Replace("\r", "");
-    public static string AnswerText(string raw)
+    public static string AnswerText(string raw) => ParseAnswer(raw, final: false);
+    public static string FinalAnswerText(string raw) => ParseAnswer(raw, final: true);
+    private static string ParseAnswer(string raw, bool final)
     {
         var text = Clean(raw).TrimStart();
         const string opening = "Thinking...";
         const string closing = "...done thinking.";
-        if (text.Length == 0 || opening.StartsWith(text, StringComparison.Ordinal)
-            || "<think>".StartsWith(text, StringComparison.Ordinal)) return "";
+        // A partial marker is hidden while streaming. At EOF, a short answer such
+        // as "T" or "<" is real text, not an unfinished marker by definition.
+        if (text.Length == 0 || (!final && (opening.StartsWith(text, StringComparison.Ordinal)
+            || "<think>".StartsWith(text, StringComparison.Ordinal)))) return "";
         if (text.StartsWith(opening, StringComparison.Ordinal))
         {
             var end = text.IndexOf(closing, StringComparison.Ordinal);
