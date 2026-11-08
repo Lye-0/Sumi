@@ -17,6 +17,8 @@
 
 必要なものは、**Windows 11・Ollama・画像入力に対応したローカルモデル**です。動作検証には `gemma4:12b` を使用しています。
 
+**注意：** 本アプリは未署名のため、Windowsの起動時にセキュリティ警告が表示される場合があります。
+
 1. Ollamaを起動し、使いたいモデルをあらかじめ導入します。Sumiからモデルのダウンロードは行いません。
 2. [Releases](https://github.com/Lye-0/Sumi/releases)から、ご使用のPCに合うZIPをダウンロードします。
    - Intel／AMDのWindows PC：`win-x64.zip`
