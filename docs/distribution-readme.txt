@@ -10,7 +10,7 @@ Windows x64ではwin-x64、Windows on Armではwin-arm64を選択してくださ
 --data-dir <directory> または SUMI_DATA_DIR で設定の保存場所を指定できます。
 右上の×はトレイへ格納します。終了する場合は「終了」を選択してください。
 
-ライセンス：GPL-3.0-only（docs/LICENSEを参照）
+ライセンス：MIT License（docs/LICENSEを参照）
 同梱.NETランタイムのライセンス・第三者通知：docs/licensesフォルダー
 Ollamaおよびモデルは同梱していません。それぞれの配布元のライセンスに従います。
 対応するソースコードは、このZIPを取得したGitHub ReleaseのSource codeから入手できます。

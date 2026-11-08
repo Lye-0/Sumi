@@ -183,4 +183,4 @@ Ollamaが起動しているか、モデルを導入済みか確認し、モデ�
 
 ビルド・テスト・実装上の補足は [開発ガイド](docs/development.md)、タグからの公開方法は [リリース手順](docs/releases.md) を参照してください。
 
-Sumiは **GPL-3.0-only** で公開しています。全文は [LICENSE](LICENSE) を参照してください。Ollamaと各モデルのライセンスは、それぞれの配布元に従います。
+Sumiは **MIT License** で公開しています。全文は [LICENSE](LICENSE) を参照してください。Ollamaと各モデルのライセンスは、それぞれの配布元に従います。

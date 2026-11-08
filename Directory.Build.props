@@ -7,6 +7,6 @@
     <Deterministic>true</Deterministic>
     <Version>0.1.0</Version>
     <Copyright>Copyright (C) 2026 Sumi contributors</Copyright>
-    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 </Project>
